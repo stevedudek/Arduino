@@ -4,18 +4,19 @@
 #include "Adafruit_WS2801.h"
 
 //
-//  Roman Helmet - Only 9 Lights. No keypad and no accelerometer
+//  Chewbacca Belt - 18 Lights
 //
 /*****************************************************************************/
 //
-// Set Up Pins
+// 11/1/14
 //
-// 2 pins for clock and data of lights.
-// 
+// Modern full colors - Only Reds
+//
+
 #define dataPin 9       // 'yellow' wire
 #define clockPin 8      // 'green' wire
 
-#define numLights 9      // number of panel lights
+#define numLights 9      // number of spikes
 
 // framebuffers
 uint32_t current_frame[numLights];
@@ -24,12 +25,13 @@ uint32_t next_frame[numLights];
 // Set the first variable to the NUMBER of pixels.
 Adafruit_WS2801 strip = Adafruit_WS2801(numLights, dataPin, clockPin);
 
-// Hat colors
+// Belt colors
 
-int foreColor  = 84;   // Starting foreground color
-int backColor = 168;   // Starting background color
-#define MaxColor 255   // Colors go from 0 to 255
+int foreColor  = 85;   // Starting foreground color
+int backColor = 170;   // Starting background color
+#define MaxColor 1536   // Colors are 6 * 256
 
+float BRIGHTNESS = 0.4;
 
 // Shows
 
@@ -41,9 +43,6 @@ int wait=6;    // index to keep track of delay time
 //
 
 void setup() {
-
-  //Serial.begin(9600);
-  //Serial.println("Start");
     
   // Start up the LED counter
   strip.begin();
@@ -58,7 +57,7 @@ void loop() {
    
   // Start with a fun random show
   
-  switch(random(6)) {
+  switch (random(8)) {
     
     case 0:    
       allOn(random(20,100));
@@ -76,14 +75,21 @@ void loop() {
       lightwave(random(10,50));
       break;
     case 5:
+      twowave(random(10,50));
+      break;
+    case 6:
       lightrunup(random(10,40));
       break;
+    case 7:
+      randomcolors(random(5,30)*10000);
+      break;
+      
   }
   
   // Then a break with all the lights off
-//  clear();
-//  strip.show();
-//  delay(random(1,4)*10000);  // Hopefully 10-1200 seconds
+  clear();
+  strip.show();
+  delay(random(2,5)*10000);
 }
 
 /*
@@ -121,9 +127,20 @@ void allOn (int cycles) {
     }
     morph_frame(GetDelayTime(wait));
   
-    if (!random(100)) { if (wait++ > maxWait) wait = 0; }
+    if (!random(1000)) { if (wait++ > maxWait) wait = 0; }
     foreColor = (foreColor + 5) % MaxColor;  
   }
+  clearWithFade(1000);
+}
+
+/*
+ * randomcolors: turns each pixel on to a random color
+ */
+
+void randomcolors(long time) {
+  for (int i=0; i < numLights; i++) setPixelColor(i, Wheel(random(MaxColor)));
+  morph_frame(1000);
+  delay(time);
   clearWithFade(1000);
 }
 
@@ -167,29 +184,25 @@ void randomfill(int cycles) {
 }  
 
 /*
- * randomcolors: turns each pixel on to a random color
- */
-
-void randomcolors(long time) {
-  for (int i=0; i < numLights; i++) setPixelColor(i, Wheel(random(MaxColor)));
-  morph_frame(1000);
-  delay(time);
-  clearWithFade(1000);
-}
-
-/*
  * twocolor: alternates the color of pixels between two colors
  */
 
-void twocolor(long time) {
-  for (int i=0; i < numLights; i++) {
-    if (i%2) { setPixelColor(i, Wheel(foreColor)); }
-    else { setPixelColor(i, Wheel(backColor)); }
+void twocolor(int cycles) {
+  
+  for (int count = 0; count < cycles; count++) {
+    for (int i=0; i < numLights; i++) {
+      if (i%2) { setPixelColor(i, Wheel(foreColor)); }
+      else { setPixelColor(i, Wheel(backColor)); }
+    }
+    morph_frame(GetDelayTime(wait));
+  
+    if (!random(1000)) { if (wait++ > maxWait) wait = 0; }
+    foreColor = (foreColor + 50) % MaxColor;
+    backColor = backColor - 20;
+    if (backColor < 0) backColor = backColor + MaxColor;
+    
   }
-  morph_frame(1000);
-  delay(time);
   clearWithFade(1000);
-  backColor = (backColor + 50) % MaxColor; 
 }
 
 /*
@@ -200,16 +213,15 @@ void twocolor(long time) {
 void rainbowshow(int cycles) {
 
   for (int count = 0; count < cycles; count++) {
-    //int diff = abs(foreColor - backColor);
-    int diff = MaxColor;
+    int diff = abs(foreColor - backColor);
     for (int i=0; i < strip.numPixels(); i++) {
       setPixelColor(i, Wheel(((i*diff / strip.numPixels())+foreColor) % diff));
     }  
     morph_frame(GetDelayTime(wait));
-    foreColor = (foreColor + 5) % MaxColor;
+    foreColor = (foreColor + 25) % MaxColor;
     
     // Possibly new delay
-    if (!random(10)) { if (wait++ > maxWait) wait = 0; }
+    if (!random(1000)) { if (wait++ > maxWait) wait = 0; }
   }
   clearWithFade(1000);
 }
@@ -229,7 +241,7 @@ void unit_test() {
 }
 
 /*
- * lightwave - Just one pixel traveling from 0 to 10
+ * lightwave - Just one pixel traveling from 0 to numLights
  */
  
 void lightwave(int cycles) {
@@ -239,6 +251,32 @@ void lightwave(int cycles) {
       for (int j=0; j < numLights; j++) {
         if (i == j) { setPixelColor(j, Wheel(foreColor)); }
         else { setPixelColor(j, Color(0,0,0)); }
+      }
+      morph_frame(GetDelayTime(wait));
+      if (!random(1000)) wait = (wait + 1) % maxWait;
+      foreColor = (foreColor + 50) % MaxColor;
+    }
+  }
+}
+
+/*
+ * twowave - Two pixels traveling in opposite directions
+ */
+ 
+void twowave(int cycles) {
+ 
+  for (int count = 0; count < cycles; count++) {
+    for (int i=0; i < numLights; i++) {
+      for (int j=0; j < numLights; j++) {
+        if (j != i && j != (numLights-i-1)) {
+          setPixelColor(j, Color(0,0,0));
+        } 
+        if (j == i) {
+          setPixelColor(j, Wheel(foreColor));
+        }
+        if (j == (numLights-i-1)) {
+          setPixelColor(j, Wheel(backColor));
+        }
       }
       morph_frame(GetDelayTime(wait));
       if (!random(100)) wait = (wait + 1) % maxWait;
@@ -262,13 +300,14 @@ void lightrunup(int cycles) {
           else { setPixelColor(j, Color(0,0,0)); }
         }
         morph_frame(GetDelayTime(wait));
-        if (!random(100)) wait = (wait + 1) % maxWait;
-        if (!random(10)) foreColor = (foreColor + 5) % MaxColor;
+        if (!random(1009)) wait = (wait + 1) % maxWait;
+        foreColor = (foreColor + 20) % MaxColor;
       }
     }
   }
   clearWithFade(1000);
 }
+
     
 //
 // Frame displays. Basically gradually changes image from previous frame to next frame.
@@ -343,46 +382,7 @@ int GetDelayTime(int wait) {
   int DelayValues[maxWait] = { 10, 20, 40, 60, 80, 100, 150, 200, 300, 500, 750, 1000 };
   if (wait < maxWait) { return (DelayValues[wait]); } else { return (DelayValues[maxWait]); }
 }
-  
-void rainbow(uint8_t wait) {
-  int i, j;
-   
-  for (j=0; j < 96 * 3; j++) {     // 3 cycles of all 96 colors in the wheel
-    for (i=0; i < strip.numPixels(); i++) {
-      strip.setPixelColor(i, Wheel( (i + j) % 96));
-    }  
-    strip.show();   // write all the pixels out
-    delay(wait);
-  }
-}
-
-// Slightly different, this one makes the rainbow wheel equally distributed 
-// along the chain
-void rainbowCycle(uint8_t frame, uint8_t wait) {
-  int i;
-  for (i=0; i < strip.numPixels(); i++) {
-      // tricky math! we use each pixel as a fraction of the full 96-color wheel
-      // (thats the i / strip.numPixels() part)
-      // 24 and division is to get the repeat pattern just right
-      // the % 96 is to make the wheel cycle around
-     strip.setPixelColor(i, Wheel(((i*24 / strip.numPixels()) + frame) % 96) );
-  }  
-  strip.show();   // write all the pixels out
-  delay(wait);
-}
-
-// fill the dots one after the other with said color
-// good for testing purposes
-void colorWipe(uint16_t c, uint8_t wait) {
-  int i;
-  
-  for (i=0; i < strip.numPixels(); i++) {
-      strip.setPixelColor(i, c);
-  }  
-  strip.show();
-  delay(wait);
-}
-
+ 
 
 /* Helper functions */
 
@@ -398,49 +398,94 @@ uint32_t Color(byte r, byte g, byte b)
   return c;
 }
 
-//Input a value 0 to 255 to get a color value.
+//Input a value 256 * 6 to get a color value.
 //The colours are a transition r - g -b - back to r
-uint32_t Wheel(byte WheelPos)
+uint32_t Wheel(int color)
 {
-  if (WheelPos < 85) {
-   return Color(WheelPos * 3, 255 - WheelPos * 3, 0);
-  } else if (WheelPos < 170) {
-   WheelPos -= 85;
-   return Color(255 - WheelPos * 3, 0, WheelPos * 3);
-  } else {
-   WheelPos -= 170; 
-   return Color(0, WheelPos * 3, 255 - WheelPos * 3);
-  }
+  return Gradient_Wheel(color, 1);  // Intensity = 1
 }
- 
-//Input a value 0 to 255 to get a color value.
+
+//Input a value 256 * 6 to get a color value.
 //The colours are a transition r - g -b - back to r
-//Furthermore, the colors are attenuated:
-//3=full strength, 2=2/3rd strength, 1=1/3rd strength, 0=barely on
-uint32_t GradientWheel(byte WheelPos, int strength)
+//Intensity must be 0 <= intensity <= 1
+uint32_t Gradient_Wheel(int color, float intensity)
 {
-  int r,g,b;
-  int s[4] = { 2, 10, 50, 255 };  // This is the attenuation percent
+    int r,g,b;
+  int channel, value;
   
-  if (WheelPos < 85) {
-   r = WheelPos * 3;
-   g = 255 - WheelPos *3;
-   b = 0;
-  } else if (WheelPos < 170) {
-   WheelPos -= 85;
-   r = 255 - WheelPos *3;
-   g = 0;
-   b = WheelPos * 3;
-  } else {
-   WheelPos -= 170; 
-   r = 0;
-   g = WheelPos * 3;
-   b = 255 - WheelPos *3;
-  }
+  color = color % MaxColor;  // Keep colors within bounds
   
-  // Attenuate r,g,b
-  r = r * s[strength] / 100;
-  g = g * s[strength] / 100;
-  b = b * s[strength] / 100;
-  return Color(r,g,b);
+  // Red party
+  color = color * 2 / 3;  // Break color into 4 (not 6) channels
+  
+  channel = color / 256;
+  value = color % 256;
+  
+  if (intensity > 1) intensity = 1;
+  if (intensity < 0) intensity = 0;
+
+  intensity *= BRIGHTNESS;
+  
+  // Red party - These values are different
+
+  switch(channel)
+  {
+    case 0:
+      r = 255;
+      g = value;
+      b = 0;        
+      break;
+    case 1:
+      r = 255;
+      g = 255 - value;
+      b = 0;        
+      break;
+    case 2:
+      r = 255;
+      g = 0;
+      b = value;         
+      break;
+    default:
+      r = 255;
+      g = 0;
+      b = 255 - value;        
+      break;
+   }
+
+/*  This is the usual wheel
+  switch(channel)
+  {
+    case 0:
+      r = 255;
+      g = value;
+      b = 0;        
+      break;
+    case 1:
+      r = 255 - value;
+      g = 255;
+      b = 0;        
+      break;
+    case 2:
+      r = 0;
+      g = 255;
+      b = value;        
+      break;
+    case 3:
+      r = 0;
+      g = 255 - value;
+      b = 255;        
+      break;
+    case 4:
+      r = value;
+      g = 0;
+      b = 255;        
+      break;
+    default:
+      r = 255;
+      g = 0;
+      b = 255 - value;        
+      break; 
+   }
+  */
+  return(Color(r * intensity, g * intensity, b * intensity));
 }     

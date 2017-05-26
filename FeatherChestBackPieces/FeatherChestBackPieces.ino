@@ -1,31 +1,37 @@
-//#include <TimerOne.h>
+  //#include <TimerOne.h>
 //#include "Button.h"
 #include "SPI.h"
 #include "Adafruit_WS2801.h"
 
 //
-//  Linear Lights
+//  Feather Chestpiece + Back Piece
 //
-//  Standard program for a linear light strip
+//  Includes extended colors
 //
-//  Set the number of lights with numLights below
-//  Modern 8-bit color lights
+//  Has a brightness setting: BRIGHTNESS and a dimmer
 //
-//  Responds to an Xbee control box, but also runs on its own
-//
-//  Morphing is HSV-corrected (thanks, Greg)
+//  4/15/17
 //
 /*****************************************************************************/
 //
-// Set Up Pins
+//  Set Up Pins
 //
-// 2 pins for clock and data of lights.
+//  2 pins for clock and data of lights.
 // 
 #define dataPin 9       // 'yellow' wire
 #define clockPin 8      // 'green' wire
 
-#define numLights 12     // Centurion helmet
+#define numLights 21
+#define symLights 10
 
+// Dimmer
+boolean USE_DIMMER = false;  // false = turn off dimmer capability
+
+#define dimmerPin 5
+int dimmerValue = 1024;
+#define MIN_DIMMER_CHANGE 0.1 // fractional minumum recognized by the dimmer
+
+float BRIGHTNESS = 0.50;  // 0.0 - 1.0 brightness level
 
 // framebuffers
 uint32_t current_frame[numLights];
@@ -35,46 +41,29 @@ uint32_t next_frame[numLights];
 byte shuffle[numLights];  // Will contain a shuffle of lights
 
 // Set the first variable to the NUMBER of pixels.
-Adafruit_WS2801 strip = Adafruit_WS2801(numLights, dataPin, clockPin);
+Adafruit_WS2801 strip = Adafruit_WS2801(numLights + 4, dataPin, clockPin);
+
+//byte PetalLookUp[16] = { 0,2,3,5,6,7,8,9,10,12,13,15 };
+byte PetalLookUp[25] = { 0,1,2,3,4,5,6,7,8,9,11,12,14,15,16,17,18,19,21,22,24 };
 
 // Light colors
 
-byte foreColor =  0;    // Starting foreground color
-byte backColor = 83;   // Starting background color
-#define MaxColor 255    // Colors go from 0 to 255
+int foreColor =   0;    // Starting foreground color
+int backColor = 500;    // Starting background color
+#define MaxColor 1530    // Colors are 6 * 255
 
 // Shows
 
-int show = 0;       // Starting show
+int show = 4;       // Starting show
 #define MAX_SHOW 8  // Total number of shows
 
 int morph = 0;      // Keeps track of morphing steps (morph clock - minute hand)
 int cycle = 0;      // Keeps track of animation (cycle clock - hour hand)
 boolean update = true; // flag that tells whether lights need to be recalculated
+
+// Delays
 int wait = 6;
 #define MAX_WAIT 12 // Number of stored delay times 
-
-// Timing variables for xBee communication
-
-unsigned long OldTime;
-unsigned long NewTime;
-boolean ALONE = true; // Flag for if controller has sent a message
-
-#define MAX_AWAY 20     // Slave goes into Alone mode if no signal in this #sec
-//#define SYNC_FREQ 500   // How often in msec that the master sends out data
-#define NO_DATA 9999
-
-// xBee language
-#define COMMAND_PROMPT     '#'
-#define COMMAND_WHITE      'W'
-#define COMMAND_COLOR      'C'
-#define COMMAND_BACKCOLOR  'B'
-#define COMMAND_DELAY      'D'
-#define COMMAND_SHOW       'S'
-#define COMMAND_COLORSENSE 'X'
-#define COMMAND_END        '$'
-
-#define COST_NUM  '3'    // Which number costume this is. Quite important!
 
 //
 // Setup
@@ -82,12 +71,7 @@ boolean ALONE = true; // Flag for if controller has sent a message
 
 void setup() {
   
-  // xBee communication
-  
-  OldTime = 0;
-  NewTime = 0;
-  
-  Serial.begin(9600);
+  //Serial.begin(9600);
   //Serial.println("Start");
     
   // Start up the LED counter
@@ -105,10 +89,10 @@ void setup() {
 
 void loop() { 
    
-  // The only delay!
-  
-  talkdelay(20);  // Important delay, also involves listening! 
- 
+  delay(10);   // The only delay!
+
+  check_dimmer();
+
   // Check if the lights need updating
   
   if (update) {
@@ -153,12 +137,11 @@ void loop() {
   if (morph++ >= GetDelayTime(wait)) {  // Finished morphing
     
     update = true;  // Force an update
-    
     morph = 0;  // Reset morphClock
     
     // Advance the cycle clock
     
-    if(cycle++ > 1000) cycle = 0;  
+    if (cycle++ > 1000) cycle = 0;  
     
     // Update the frame display
   
@@ -169,15 +152,12 @@ void loop() {
   
   // Randomly change foreColor, backColor, show, and timing
   
-  if (!random(25)) {
-    foreColor = (foreColor + 1) % MaxColor;
-    update = true;
+  if (!random(10)) {
+    foreColor = IncColor(foreColor, 5);
   }
   
-  if (!random(25)) {
-    backColor -= 2;
-    if (backColor < 0) backColor += MaxColor;
-    update = true;
+  if (!random(10)) {
+    backColor = IncColor(backColor, -10);
   }
   
   if (!random(10000)) {
@@ -185,6 +165,7 @@ void loop() {
     morph = 0;
     cycle = 0;
     clearWithFade();
+    delay(1000 * random(5,30));  // Dark for 5-30 seconds
   }
   
   if (!random(1000)) {
@@ -203,8 +184,17 @@ void loop() {
 // 
 void clear() {
   for (int i=0; i<numLights; i++) {
-    strip.setPixelColor(i, Color(0,0,0));
+    strip.setPixelColor(PetalLookUp[i], Color(0,0,0));
     setPixelColor(i, Color(0,0,0));
+  }
+}
+
+//
+// fill
+//
+void fill(uint32_t color) {
+  for (int i = 0; i < numLights; i++) {
+    setPixelColor(i, color);
   }
 }
 
@@ -213,29 +203,7 @@ void clear() {
 // Fades lights to black
 //
 void clearWithFade() {
-  for (int i=0; i<numLights; i++) {
-    setPixelColor(i, Color(0,0,0));
-  }
-}
-
-// Turn all one color
-//
-// Turn all pixels foreceably one color, then delays
-//
-void TurnAllOneColor(uint32_t color, int rest) {
-  for (int i=0; i<numLights; i++) {
-    strip.setPixelColor(i, color);
-  }
-  strip.show();
-  delay(rest);
-}
-
-// Turn all white
-//
-// Turns all pixels forceably white, then delays
-//
-void TurnAllWhite(int rest) {
-  TurnAllOneColor(Color(255,255,255), rest);
+  fill(Color(0,0,0));
 }
 
 //
@@ -244,9 +212,20 @@ void TurnAllWhite(int rest) {
 // Simply turns all the pixels on to one color
 // 
 void allOn() {
-   for (int i=0; i < strip.numPixels(); i++) {
-     setPixelColor(i, Wheel(foreColor));
-   }
+   fill(Wheel(foreColor));
+}
+
+//
+// check_dimmer - see whether the dimmer pot has changed - if so, adjust BRIGHTNESS
+//
+void check_dimmer() {
+  if (USE_DIMMER) {
+    int new_value = analogRead(dimmerPin);
+    if (((abs(new_value - dimmerValue) / 1024.0) >= MIN_DIMMER_CHANGE) || ((new_value >= 1020) && (dimmerValue < 1000)) || ((new_value < 20) && (dimmerValue > 50))) {
+      dimmerValue = new_value;
+      BRIGHTNESS = dimmerValue / 1024.0;
+    }
+  }
 }
 
 // random fill
@@ -259,6 +238,9 @@ void randomfill() {
   int i, j, save, pos;
   
   pos = cycle % (numLights*2);  // Where we are in the show
+  if (pos >= numLights) {
+    pos = (numLights*2) - pos;  // For a sawtooth effect
+  }
   
   if (pos == 0) {  // Start of show
   
@@ -276,7 +258,7 @@ void randomfill() {
     if (i < pos) {  
       setPixelColor(shuffle[i], Wheel(foreColor));  // Turning on lights one at a time
     } else { 
-      setPixelColor(shuffle[numLights-(i % numLights)-1], Color(0,0,0));  // Turning off lights one at a time
+      setPixelBlack(shuffle[i]);  // Turning off lights one at a time
     }
   }
 }  
@@ -289,7 +271,9 @@ void randomcolors() {
   int i;
   
   if (cycle == 0) {  // Start of show: assign lights to random colors
-    for (i=0; i < numLights; i++) shuffle[i] = random(MaxColor);
+    for (i=0; i < numLights; i++) {
+      shuffle[i] = random(MaxColor);
+    }
   }
   
   // Otherwise, fill lights with their color
@@ -303,9 +287,9 @@ void randomcolors() {
 // alternates the color of pixels between two colors
 //
 void twocolor() {
-  for (int i=0; i < numLights; i++) {
-    if (i%2) setPixelColor(i, Wheel(foreColor));
-    else setPixelColor(i, Wheel(backColor));
+  for (int i=0; i < symLights; i++) {
+    if (i%2) setSymPixelColor(i, Wheel(foreColor));
+    else setSymPixelColor(i, Wheel(backColor));
   }
 }
 
@@ -318,9 +302,9 @@ void twocolor() {
 void morphChain() {
   float attenuation;
   
-  for (int i=0; i < numLights; i++) {
-    attenuation = ((i+(cycle%numLights)) % numLights)/(float)(numLights-1);
-    setPixelColor(i, HSVinter24(Wheel(foreColor),Wheel(backColor), attenuation));
+  for (int i=0; i < symLights; i++) {
+    attenuation = ((i+(cycle%symLights)) % symLights)/(float)(symLights-1);
+    setSymPixelColor(i, HSVinter24(Wheel(foreColor),Wheel(backColor), attenuation));
   }
 }
 
@@ -334,11 +318,11 @@ void morphChain() {
 void sawtooth() {
   float attenuation;
   
-  for (int i=0; i < numLights; i++) {
-    attenuation = 2*(((i+(cycle%numLights)) % numLights)/(float)(numLights-1));
+  for (int i=0; i < symLights; i++) {
+    attenuation = 2*(((i+(cycle%symLights)) % symLights)/(float)(symLights-1));
     if (attenuation > 1) attenuation = 2 - attenuation;  // the '2 -' creates the sawtooth
     attenuation = attenuation * attenuation;  // magnify effect - color brightness is not linear
-    setPixelColor(i, HSVinter24(Color(0,0,0), Wheel(foreColor), attenuation));
+    setSymPixelColor(i, HSVinter24(Color(0,0,0), Wheel(foreColor), attenuation));
   }
 }
 
@@ -350,8 +334,8 @@ void sawtooth() {
 void rainbowshow(int cycles) {
   int diff = abs(foreColor - backColor);
   
-  for (int i=0; i < numLights; i++) {
-    setPixelColor( (i+(cycle%numLights)) % numLights, Wheel(((i*diff / numLights)+foreColor) % diff) );
+  for (int i=0; i < symLights; i++) {
+    setSymPixelColor( (i+(cycle%symLights)) % symLights, Wheel(((i*diff / symLights)+foreColor) % diff) );
   }
 }
 
@@ -362,9 +346,9 @@ void rainbowshow(int cycles) {
  
 void lightwave() {
  
-  for (int i=0; i < numLights; i++) {
-     if (i == numLights-(cycle % numLights)-1) setPixelColor(i, Wheel(foreColor));
-     else setPixelColor(i, Color(0,0,0));
+  for (int i=0; i < symLights; i++) {
+     if (i == symLights-(cycle % symLights)-1) setSymPixelColor(i, Wheel(foreColor));
+     else setSymPixelColor(i, Color(0,0,0));
   }
 }
 
@@ -374,14 +358,14 @@ void lightwave() {
 // lights fill up one at time
 // 
 void lightrunup() {
-  int pos = cycle % (numLights*2);  // Where we are in the show
-  if (pos >= numLights) pos = (numLights*2) - pos - 1;
+  int pos = cycle % (symLights*2);  // Where we are in the show
+  if (pos >= symLights) pos = (symLights*2) - pos - 1;
   
-  for (int i=0; i < numLights; i++) {
+  for (int i=0; i < symLights; i++) {
     if (i <= pos) {
-      setPixelColor(i, Wheel(foreColor));  // Turning on lights one at a time
+      setSymPixelColor(i, Wheel(foreColor));  // Turning on lights one at a time
     } else {
-      setPixelColor(i, Color(0,0,0));   // black
+      setSymPixelColor(i, Color(0,0,0));   // black
     }
   }
 }
@@ -394,14 +378,61 @@ void lightrunup() {
 //
 
 void morph_frame() {
+   float fract = (float)morph/GetDelayTime(wait);
+   if (fract > 1.0) {
+     fract = 1.0;
+   } else if (fract < 0) {
+     fract = 0;
+   }
    for (int i = 0; i < numLights; i++) {
-     strip.setPixelColor(i, HSVinter24(current_frame[i], next_frame[i], (float)morph/GetDelayTime(wait)));
+     strip.setPixelColor(PetalLookUp[i], HSVinter24(current_frame[i], next_frame[i], fract));
    }
    strip.show();  // Update the display 
 }
 
-void setPixelColor(int pos, uint32_t color) {
+//
+// set SymPixelColor(int pos, uint32_t color) {
+//
+// Forces the two poles to have symmetric pixels
+
+void setSymPixelColor(int pos, uint32_t color) {
+  pos = LookUpPixel(pos);
+  pos = pos % symLights;
+  
   next_frame[pos] = color;
+  next_frame[numLights - pos - 1] = color;
+  
+  if (pos == symLights - 1) next_frame[symLights] = color;
+}
+
+void setPixelColor(int pos, uint32_t color) {
+  next_frame[LookUpPixel(pos)] = color;
+}
+
+void setPixelBlack(byte pos) {
+  next_frame[LookUpPixel(pos)] = Color(0,0,0);
+}
+
+byte LookUpPixel(byte pos) {
+  if (pos >= 9) {
+    pos -= 4;
+    return pos;
+  } else if (pos > 4) {
+    pos += 12;
+  }
+  return pos;
+}
+
+//
+// IncColor
+//
+// Adds amount to color
+//
+int IncColor(int color, int amount) {
+  int value = color + amount;
+  while (value < 0) value += MaxColor;
+  while (value >= MaxColor) value -= MaxColor;
+  return value;
 }
 
 //
@@ -411,167 +442,9 @@ void setPixelColor(int pos, uint32_t color) {
 //
  
 int GetDelayTime(int wait) {
-  int DelayValues[MAX_WAIT] = { 2, 3, 4, 6, 8, 10, 15, 20, 30, 50, 75, 100 };
+  int DelayValues[MAX_WAIT] = { 4, 6, 8, 12, 20, 30, 50, 75, 100, 150, 200, 250 };
   return (DelayValues[wait % MAX_WAIT]);
 }
-
-//
-// talk delay
-//
-// Runs a normal timed delay
-//
-// Meanwhile, listen to the box every POLL_TIMEms
-
-
-#define POLL_TIME 10
-
-void talkdelay(int delaytime) {
-  int i;
-  for(i = delaytime; i > POLL_TIME; i -= POLL_TIME) {
-    if(HearBox()) { // Got a command that requires immediate return?
-      delay(i);
-      return;   // Yes, go fix things
-    }
-    delay(POLL_TIME);
-  }
-  delay(i); // The remainder
-}
-
-//
-// HearBox
-//
-// Listen for the Box
-//
-
-boolean HearBox() {
-  char incoming;
-  long value;
-  
-  NewTime = millis();  // Take a time point
-  
-  if (Serial.available()) {
-    
-    incoming = Serial.read();
-    if (incoming == COMMAND_PROMPT) {  // Heard from the box
-       incoming = Serial.read();       // For which number costume?
-       if (incoming == COST_NUM || incoming == '9') {  // Talking to me!
-           OldTime = NewTime;    // Reset the clock
-           ALONE = false;        // We're in contact! 
-       
-           incoming = Serial.read();  // Get that one-letter command
-           //Serial.print(incoming);
-           value = HearNum();         // Get the number that follows the command
-           //Serial.println(value);
-           if (value == NO_DATA) {
-              //Serial.println("No legitimate number read");
-             return(false); // Not getting a legit number
-           }
-           // Execute the command and return any flags from it
-           return(ExecuteCommand(incoming, value));
-       }
-    }
-  }
-   
-  // No received Serial.available or not talking to me
-  //
-  // Check how long since last hearing from the Master
-
-  if((NewTime - OldTime)/1000 > MAX_AWAY) {
-    OldTime = NewTime;    // Reset the clock (for some reason?)
-    ALONE = true;         // Lost contact with the Master
-    //Serial.println("Feeling very alone");
-  }
-  return(false);  // no system update required
-}
-
-//
-// HearNum
-//
-// Converts xBee characters into a number
-// '$' character terminates the number string
-//
-// If no number, returns NO_DATA signifier
-
-long HearNum() {
-  #define BUFSIZE 20
-  #define TIMEOUT_TRIES 100
-  
-  int waitTime = 0;  // Start counter
-  int charplace = 0; // Start of number
-  char buf[BUFSIZE];
-  
-  // Clear character buffer
-  for (int i = 0; i <BUFSIZE; i++) buf[i] = 0;
-  
-  while (waitTime < TIMEOUT_TRIES) {
-   
-    if (Serial.available()) {
-      char tmp = Serial.read();
-      //Serial.print(tmp);
-      if (tmp != '$') { // Hopefully 0-9 and '-'
-        waitTime = 0;  // Reset wait counter
-        buf[charplace] = tmp;
-        if (charplace++ >= BUFSIZE) { return(NO_DATA); } // Number too long
-       } else {      // Got a '$' to end the word
-         if (charplace>0) return atoi(buf); else {  // successfully reached the end of a number 
-           //Serial.println("i=0 number read");
-           return(NO_DATA);  // Returning an empty word
-         }
-       }
-      } else { 
-        delay(1);
-        waitTime++;
-      }
-    }
-  //Serial.println("Out_of_Time");
-  return(NO_DATA);  // ran out of time for next character: bail and return NO_DATA
-}
-
-//
-// Execute Command
-//
-// Interprets a letter command and a number value
-// Returns a flag alerting whether to break out of the current loop
-
-boolean ExecuteCommand(char command, long value) {
-  int newDelay;
-  
-  switch(command) {
-      case COMMAND_COLOR:
-        foreColor = value % MaxColor;
-        return(true);
-        break;
-      case COMMAND_BACKCOLOR:
-        backColor = value % MaxColor;
-        return(true);
-        break;  
-      case COMMAND_WHITE:
-        TurnAllWhite(value);
-        return(false);
-        break;
-      case COMMAND_DELAY:
-        wait = (MAX_WAIT-1) * value / 255;
-        morph = min(morph, GetDelayTime(wait));
-        return(false);
-        break;
-      case COMMAND_SHOW:
-        if (value % MAX_SHOW != show) {
-          show = value % MAX_SHOW;
-          morph = 0;
-          cycle = 0;
-          clearWithFade();
-          return(true);
-        }
-        break;
-      case COMMAND_COLORSENSE:
-        TurnAllOneColor(value, 1000);
-        return(false);
-        break;
-      default:
-        return(false);
-  }
-  return(false);
-} 
 
 /* Helper functions */
 
@@ -616,27 +489,97 @@ boolean IsBlack(byte r, byte g, byte b)
 }
 
 
-//Input a value 0 to 255 to get a color value.
+//Input a value 256 * 6 to get a color value.
 //The colours are a transition r - g -b - back to r
-uint32_t Wheel(byte WheelPos)
+uint32_t Wheel(int color)
+{
+  return Gradient_Wheel(color, 1);  // Intensity = 1
+}
+
+//Input a value 255 * 6 to get a color value.
+//The colours are a transition r - g -b - back to r
+//Intensity must be 0 <= intensity <= 1
+uint32_t Gradient_Wheel(int color, float intensity)
 {
   int r,g,b;
-  if (WheelPos < 85) {
-    r = WheelPos * 3;
-    g = 255 - WheelPos *3;
-    b = 0;
-  } else if (WheelPos < 170) {
-    WheelPos -= 85;
-    r = 255 - WheelPos *3;
-    g = 0;
-    b = WheelPos * 3;
-  } else {
-    WheelPos -= 170; 
-    r = 0;
-    g = WheelPos * 3;
-    b = 255 - WheelPos *3;
-  }
-  return Color(r,g,b);
+  int channel, value;
+  
+  color = color % MaxColor;  // Keep colors within bounds  
+
+  // Red party
+  color = color * 2 / 3;  // Break color into 4 (not 6) channels
+  
+  channel = color / 256;
+  value = color % 256;
+  
+  if (intensity > 1) intensity = 1;
+  if (intensity < 0) intensity = 0;
+
+  intensity *= BRIGHTNESS;
+
+  // Red party - These values are different
+
+  switch(channel)
+  {
+    case 0:
+      r = 255;
+      g = value;
+      b = 0;        
+      break;
+    case 1:
+      r = 255;
+      g = 255 - value;
+      b = 0;        
+      break;
+    case 2:
+      r = 255;
+      g = 0;
+      b = value;         
+      break;
+    default:
+      r = 255;
+      g = 0;
+      b = 255 - value;        
+      break;
+   }
+
+   /*
+  switch(channel)
+  {
+    case 0:
+      r = 255;
+      g = value;
+      b = 0;        
+      break;
+    case 1:
+      r = 255 - value;
+      g = 255;
+      b = 0;        
+      break;
+    case 2:
+      r = 0;
+      g = 255;
+      b = value;        
+      break;
+    case 3:
+      r = 0;
+      g = 255 - value;
+      b = 255;        
+      break;
+    case 4:
+      r = value;
+      g = 0;
+      b = 255;        
+      break;
+    default:
+      r = 255;
+      g = 0;
+      b = 255 - value;        
+      break; 
+   }
+   */
+   
+  return(Color(r * intensity, g * intensity, b * intensity));
 }
  
 

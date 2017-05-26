@@ -4,14 +4,16 @@
 #include "Adafruit_WS2801.h"
 
 //
-//  Linear Lights
+//  Seahorse Tail
 //
-//  Standard program for a linear light strip
+//  8/16/2014
+//
+//  From a Standard program for a linear light strip
 //
 //  Set the number of lights with numLights below
-//  Modern 8-bit color lights
+//  Full wheel colors
 //
-//  Responds to an Xbee control box, but also runs on its own
+//  Could responds to an Xbee control box, but also runs on its own
 //
 //  Morphing is HSV-corrected (thanks, Greg)
 //
@@ -24,7 +26,7 @@
 #define dataPin 9       // 'yellow' wire
 #define clockPin 8      // 'green' wire
 
-#define numLights 12     // Centurion helmet
+#define numLights 18     // Tail lights
 
 
 // framebuffers
@@ -39,13 +41,13 @@ Adafruit_WS2801 strip = Adafruit_WS2801(numLights, dataPin, clockPin);
 
 // Light colors
 
-byte foreColor =  0;    // Starting foreground color
-byte backColor = 83;   // Starting background color
-#define MaxColor 255    // Colors go from 0 to 255
+int foreColor =  0;    // Starting foreground color
+int backColor = 500;   // Starting background color
+#define MaxColor 1530   // Colors are 6 * 255
 
 // Shows
 
-int show = 0;       // Starting show
+int show = 4;       // Starting show
 #define MAX_SHOW 8  // Total number of shows
 
 int morph = 0;      // Keeps track of morphing steps (morph clock - minute hand)
@@ -81,6 +83,8 @@ boolean ALONE = true; // Flag for if controller has sent a message
 //
 
 void setup() {
+  
+  randomSeed(analogRead(0));
   
   // xBee communication
   
@@ -180,11 +184,18 @@ void loop() {
     update = true;
   }
   
-  if (!random(10000)) {
-    show = (show + 1) % MAX_SHOW;
+  if (!random(10000)) {  // Change the show
+    // Toggle between show 4 (two color) and all the other shows
+    if (show != 4) show = 4;  //
+    else {
+      while (show == 4) {
+        show = random(MAX_SHOW);
+      }
+    }
     morph = 0;
     cycle = 0;
     clearWithFade();
+    delay(10000);  // 10 second delay between shows
   }
   
   if (!random(1000)) {
@@ -320,7 +331,7 @@ void morphChain() {
   
   for (int i=0; i < numLights; i++) {
     attenuation = ((i+(cycle%numLights)) % numLights)/(float)(numLights-1);
-    setPixelColor(i, HSVinter24(Wheel(foreColor),Wheel(backColor), attenuation));
+    setPixelColor(numLights-i-1, HSVinter24(Wheel(foreColor),Wheel(backColor), attenuation));
   }
 }
 
@@ -338,7 +349,8 @@ void sawtooth() {
     attenuation = 2*(((i+(cycle%numLights)) % numLights)/(float)(numLights-1));
     if (attenuation > 1) attenuation = 2 - attenuation;  // the '2 -' creates the sawtooth
     attenuation = attenuation * attenuation;  // magnify effect - color brightness is not linear
-    setPixelColor(i, HSVinter24(Color(0,0,0), Wheel(foreColor), attenuation));
+    // "i" will have pattern move up; "numLights-i-1'' will have pattern move down
+    setPixelColor(numLights-i-1, HSVinter24(Color(0,0,0), Wheel(foreColor), attenuation));
   }
 }
 
@@ -349,9 +361,11 @@ void sawtooth() {
  
 void rainbowshow(int cycles) {
   int diff = abs(foreColor - backColor);
+  int j;
   
   for (int i=0; i < numLights; i++) {
-    setPixelColor( (i+(cycle%numLights)) % numLights, Wheel(((i*diff / numLights)+foreColor) % diff) );
+    j = (i+(cycle%numLights)) % numLights;
+    setPixelColor(numLights-j-1, Wheel(((i*diff / numLights)+foreColor) % diff));
   }
 }
 
@@ -363,7 +377,7 @@ void rainbowshow(int cycles) {
 void lightwave() {
  
   for (int i=0; i < numLights; i++) {
-     if (i == numLights-(cycle % numLights)-1) setPixelColor(i, Wheel(foreColor));
+     if (i == cycle % numLights) setPixelColor(i, Wheel(foreColor));
      else setPixelColor(i, Color(0,0,0));
   }
 }
@@ -616,28 +630,64 @@ boolean IsBlack(byte r, byte g, byte b)
 }
 
 
-//Input a value 0 to 255 to get a color value.
+//Input a value 256 * 6 to get a color value.
 //The colours are a transition r - g -b - back to r
-uint32_t Wheel(byte WheelPos)
+uint32_t Wheel(int color)
+{
+  return Gradient_Wheel(color, 1);  // Intensity = 1
+}
+
+//Input a value 255 * 6 to get a color value.
+//The colours are a transition r - g -b - back to r
+//Intensity must be 0 <= intensity <= 1
+uint32_t Gradient_Wheel(int color, float intensity)
 {
   int r,g,b;
-  if (WheelPos < 85) {
-    r = WheelPos * 3;
-    g = 255 - WheelPos *3;
-    b = 0;
-  } else if (WheelPos < 170) {
-    WheelPos -= 85;
-    r = 255 - WheelPos *3;
-    g = 0;
-    b = WheelPos * 3;
-  } else {
-    WheelPos -= 170; 
-    r = 0;
-    g = WheelPos * 3;
-    b = 255 - WheelPos *3;
-  }
-  return Color(r,g,b);
-}
+  int channel, value;
+  
+  color = color % MaxColor;  // Keep colors within bounds
+    
+  channel = color / 255;
+  value = color % 255;
+  
+  if (intensity > 1) intensity = 1;
+  if (intensity < 0) intensity = 0;
+  
+  switch(channel)
+  {
+    case 0:
+      r = 255;
+      g = value;
+      b = 0;        
+      break;
+    case 1:
+      r = 255 - value;
+      g = 255;
+      b = 0;        
+      break;
+    case 2:
+      r = 0;
+      g = 255;
+      b = value;        
+      break;
+    case 3:
+      r = 0;
+      g = 255 - value;
+      b = 255;        
+      break;
+    case 4:
+      r = value;
+      g = 0;
+      b = 255;        
+      break;
+    default:
+      r = 255;
+      g = 0;
+      b = 255 - value;        
+      break; 
+   }
+  return(Color(r * intensity, g * intensity, b * intensity));
+} 
  
 
 // r,g,b values are from 0 to 255
@@ -740,7 +790,7 @@ void HSVtoRGB( byte *r, byte *g, byte *b, float h, float s, float v )
 //  Wrapper for HSV Interpolate RGB below
 //  start and end colors are 0-255 wheel colors
 
-uint32_t HSVinterWheel(byte c1, byte c2, float fract)
+uint32_t HSVinterWheel(int c1, int c2, float fract)
 {
   return(HSVinter24(Wheel(c1),Wheel(c2),fract));
 }
@@ -853,9 +903,9 @@ uint32_t HSVinterRGB(byte r1, byte g1, byte b1, byte r2, byte g2, byte b2, float
 //  RGB Interpolate Wheel
 //
 //  Wrapper for RGB Interpolate RGB below
-//  start and end colors are 0-255 wheel colors
+//  start and end colors are wheel colors
 
-uint32_t RGBinterWheel(byte c1, byte c2, float fract)
+uint32_t RGBinterWheel(int c1, int c2, float fract)
 {
   return(RGBinter24(Wheel(c1),Wheel(c2),fract));
 }

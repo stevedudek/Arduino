@@ -14,7 +14,7 @@
 #define dataPin 9       // 'yellow' wire
 #define clockPin 8      // 'green' wire
 
-#define numLights 50      // number of lights
+#define numLights 12      // number of lights
 
 #define MIN_DELAY  20    // Fastest pulse time
 
@@ -40,7 +40,7 @@ void setup() {
 
 void loop() {
   
-  int intensity = calcIntense(clock);  // 0 - 255 value;
+  int intensity = 127;//calcIntense(clock);  // 0 - 255 value;
   
   for (int i = 0; i < numLights; i++) {
     if (i % 2) strip.setPixelColor(i, Color(intensity, 0, 0));

@@ -1,27 +1,25 @@
-  //#include <TimerOne.h>
-//#include "Button.h"
 #include "SPI.h"
 #include "Adafruit_WS2801.h"
 
+//  USE THIS VERSION
 //
-//  Ear Wings
+//  Triceratops - 45 cones on a coat
 //
-//  10/14/14
+//  5/20/16
 //
-//  Includes extended colors
-//  Removes xBee hardware
+//  Standard rgb colors - Abandoned FastLED
 //
 /*****************************************************************************/
 //
-// Set Up Pins
+//  Set Up Pins
 //
-// 2 pins for clock and data of lights.
+//  2 pins for clock and data of lights.
 // 
-#define dataPin 8       // 'yellow' wire
-#define clockPin 9      // 'green' wire
+#define dataPin 9       // 'yellow' wire
+#define clockPin 8      // 'green' wire
 
-#define numLights 10
-#define symLights 5
+#define bodyLights 42
+#define numLights 45
 
 // framebuffers
 uint32_t current_frame[numLights];
@@ -35,48 +33,194 @@ Adafruit_WS2801 strip = Adafruit_WS2801(numLights, dataPin, clockPin);
 
 // Light colors
 
-int foreColor =   0;    // Starting foreground color
-int backColor = 500;    // Starting background color
-#define MaxColor 1536    // Colors are 6 * 255
+#define maxColor 1530     // Colors are 6 * 255
+int foreColor =     0;    // Starting foreground color
+int backColor =   500;    // Starting background color
 
 // Shows
 
-int show = 0;       // Starting show
-#define MAX_SHOW 8  // Total number of shows
+byte curr_show = 0;       // Starting show
+#define MAX_SHOW 18  // Total number of shows
 
 int morph = 0;      // Keeps track of morphing steps (morph clock - minute hand)
 int cycle = 0;      // Keeps track of animation (cycle clock - hour hand)
 boolean update = true; // flag that tells whether lights need to be recalculated
 
 // Delays
-int wait = 6;
+int wait = 0;
 #define MAX_WAIT 12 // Number of stored delay times 
+
+// Lookup tables
+
+byte ConeLookUp[45] = {
+      44,
+    42, 43,
+  41, 40, 32,
+    39, 33,
+  38, 34, 31,
+    35, 30,
+  36, 29, 20,
+37, 28, 21, 19,
+  27, 22, 18,
+26, 23, 17,  9,
+  24, 16,  8,
+25, 15,  7, 10,
+  14,  6, 11,
+     5, 12,
+   4, 13,  0,
+     3,  1,
+       2
+};
+
+byte PatternLookUp[45] = { 41,43,44,42,39,37,35,32,29,26,
+                           33,36,38,40,34,31,28,25,22,19,
+                           15,18,21,24,27,30,23,20,17,14,
+                           12,10,5,7,9,11,13,16,8,6,
+                           4,3,2,1,0 };
+
+byte Stripe_Pattern[45] = {
+       0,
+     0,  0,
+   0,  1,  0,
+     0,  0,
+   0,  1,  0,
+     0,  0,
+   0,  1,  0,
+ 0,  1,  1,  0,
+   0,  1,  0,
+ 0,  1,  1,  0,
+   0,  1,  0,
+ 0,  1,  1,  0,
+   0,  1,  0,
+     0,  0,
+   0,  1,  0,
+     0,  0,
+       0
+};
+
+byte Section_Pattern[45] = {
+       2,
+     2,  2,
+   0,  0,  0,
+     0,  0,
+   0,  0,  0,
+     0,  0,
+   0,  1,  0,
+ 0,  1,  1,  0,
+   0,  1,  0,
+ 0,  1,  1,  0,
+   0,  1,  0,
+ 0,  1,  1,  0,
+   0,  1,  0,
+     0,  0,
+   2,  0,  2,
+     2,  2,
+       2
+};
+
+byte Explode_Pattern[45] = {
+       5,
+     5,  5,
+   5,  4,  5,
+     4,  4,
+   4,  3,  4,
+     3,  3,
+   3,  2,  3,
+ 3,  1,  1,  3,
+   2,  0,  2,
+ 3,  1,  1,  3,
+   3,  2,  3,
+ 4,  3,  3,  4,
+   4,  3,  4,
+     4,  4,
+   5,  4,  5,
+     5,  5,
+       5
+};
+
+byte Alternate_Pattern[45] = {
+       0,
+     1,  1,
+   1,  0,  0,
+     0,  1,
+   1,  0,  0,
+     0,  1,
+   1,  0,  0,
+ 0,  0,  1,  0,
+   1,  0,  0,
+ 1,  0,  1,  0,
+   1,  0,  0,
+ 0,  0,  0,  1,
+   0,  1,  0,
+     0,  0,
+   1,  0,  1,
+     0,  0,
+       1
+};
+
+byte SideSide_Pattern[45] = {
+       3,
+     2,  4,
+   1,  3,  5,
+     2,  4,
+   1,  3,  5,
+     2,  4,
+   1,  3,  5,
+ 0,  2,  4,  6,
+   1,  3,  5,
+ 0,  2,  4,  6,
+   1,  3,  5,
+ 0,  2,  4,  6,
+   1,  3,  5,
+     2,  4,
+   1,  3,  5,
+     2,  4,
+       3
+};
+
+byte Diag_Pattern[45] = {
+       0,
+     1,  0,
+   2,  1,  0,
+     2,  1,
+   3,  2,  1,
+     3,  2,
+   4,  3,  2,
+ 5,  4,  3,  2,
+   5,  4,  3,
+ 6,  5,  4,  3,
+   6,  5,  4,
+ 7,  6,  5,  4,
+   7,  6,  5,
+     7,  6,
+   8,  7,  6,
+     8,  7,
+       8
+};
+
+byte ConeSize[45] = { 5,5,5,5,5,3,5,1,3,5,1,1,5,4,3,4,5,5,6,3,6,2,1,6,6,4,2,6,2,1,3,4,2,4,4,5,3,2,2,3,1,6,3,3,1 };
 
 //
 // Setup
 //
-
 void setup() {
   
-  //Serial.begin(9600);
-  //Serial.println("Start");
-    
+  Serial.begin(9600);
+  Serial.println("Start");
+  
+  randomSeed(analogRead(0));
+  
   // Start up the LED counter
   strip.begin();
-  
-  // Initialize the strip, to start they are all 'off'
-  
-  for (int i=0; i<numLights; i++) {
-    current_frame[i] = Color(0,0,0);        // Black
-    next_frame[i] = Color(0,0,0);           // Black
-    strip.setPixelColor(i, Color(0,0,0));
-  }
+
+  // Update the strip, to start they are all 'off'
+  clear();
   strip.show();
 }
 
 void loop() { 
    
-  delay(20);   // The only delay!
+  delay(50);   // The only delay!
   
   // Check if the lights need updating
   
@@ -84,31 +228,61 @@ void loop() {
     
     update = false;
     
-    switch(4) {
+    switch(curr_show) {
     
       case 0:    
         allOn();
         break;
       case 1:
-        morphChain();
-        break;
-      case 2:
         randomfill();
         break;
-      case 3:
+      case 2:
         randomcolors();
         break;
-      case 4:
+      case 3:
         twocolor();
         break;
-      case 5:
+      case 4:
         lightwave();
         break;
-      case 6:
+      case 5:
         lightrunup();
         break;
+      case 6:
+        colorsize();
+        break;
       case 7:
-        sawtooth();
+        brightsize();
+        break;
+      case 8:
+        stripe();
+        break;
+      case 9:
+        alternate();
+        break;
+      case 10:
+        diagcolor();
+        break;
+      case 11:
+        sidesidecolor();
+        break;
+      case 12:
+        explodecolor();
+        break;
+      case 13:
+        diagbright();
+        break;
+      case 14:
+        sidesidebright();
+        break;
+      case 15:
+        explodebright();
+        break;
+      case 16:
+        sectioncolor();
+        break;
+      default:
+        clearWithFade();
         break;
     }
   }
@@ -118,39 +292,29 @@ void loop() {
   morph_frame();
   
   // Advance the clock
-   
-  if (morph++ >= GetDelayTime(wait)) {  // Finished morphing
-    
-    update = true;  // Force an update
-    
-    morph = 0;  // Reset morphClock
-    
-    // Advance the cycle clock
-    
-    if(cycle++ > 1000) cycle = 0;  
-    
-    // Update the frame display
   
-    for (int i = 0; i < numLights; i++) {
-      current_frame[i] = next_frame[i];
-    }
+  if (morph++ >= GetDelayTime(wait)) {  // Finished morphing
+    update = true;  // Force an update
+    push_frame();
+    morph = 0;  // Reset morphClock
+
+    if (cycle++ > 1000) cycle = 0;  // Advance the cycle clock
   }
   
   // Randomly change foreColor, backColor, show, and timing
   
-  if (!random(10)) {
-    foreColor = (foreColor + 5) % MaxColor;
+  if (!random(100)) {
+    foreColor = IncColor(foreColor, 10);
     update = true;
   }
   
-  if (!random(10)) {
-    backColor -= 10;
-    if (backColor < 0) backColor += MaxColor;
+  if (!random(200)) {
+    backColor = IncColor(backColor, -20);
     update = true;
   }
   
-  if (!random(10000)) {
-    show = (show + 1) % MAX_SHOW;
+  if (!random(4000)) {
+    curr_show = random(MAX_SHOW);
     morph = 0;
     cycle = 0;
     clearWithFade();
@@ -158,10 +322,19 @@ void loop() {
   
   if (!random(1000)) {
     wait++;
-    if (wait == MAX_WAIT) {
+    if (wait >= MAX_WAIT) {
       wait = 0;
       morph = 0;
     }
+  }
+}
+
+//
+// push_frame()
+//
+void push_frame() {
+  for (int i = 0; i < numLights; i++) {
+    current_frame[i] = next_frame[i];
   }
 }
 
@@ -171,9 +344,10 @@ void loop() {
 // ignores buffering
 // 
 void clear() {
-  for (int i=0; i<numLights; i++) {
+  for (int i=0; i < numLights; i++) {
     strip.setPixelColor(i, Color(0,0,0));
-    setPixelColor(i, Color(0,0,0));
+    current_frame[i] = Color(0,0,0);
+    next_frame[i] = Color(0,0,0);
   }
 }
 
@@ -182,8 +356,8 @@ void clear() {
 // Fades lights to black
 //
 void clearWithFade() {
-  for (int i=0; i<numLights; i++) {
-    setPixelColor(i, Color(0,0,0));
+  for (int i=0; i < numLights; i++) {
+    setPixelBlack(i);
   }
 }
 
@@ -193,8 +367,8 @@ void clearWithFade() {
 // Simply turns all the pixels on to one color
 // 
 void allOn() {
-   for (int i=0; i < strip.numPixels(); i++) {
-     setPixelColor(i, Wheel(foreColor));
+   for (int i=0; i < numLights; i++) {
+     setPixel(i, foreColor);
    }
 }
 
@@ -207,27 +381,31 @@ void allOn() {
 void randomfill() {
   int i, j, save, pos;
   
-  pos = cycle % (numLights*2);  // Where we are in the show
+  pos = cycle % (bodyLights*2);  // Where we are in the show
+  if (pos >= bodyLights) {
+    pos = (bodyLights*2) - pos;  // For a sawtooth effect
+  }
   
   if (pos == 0) {  // Start of show
   
     // Shuffle sort to determine order to turn on lights
-    for (i=0; i < numLights; i++) shuffle[i] = i; // before shuffle
-    for (i=0; i < numLights; i++) {  // here's position
-      j = random(numLights);         // there's position
+    for (i=0; i < bodyLights; i++) shuffle[i] = i; // before shuffle
+    for (i=0; i < bodyLights; i++) {  // here's position
+      j = random(bodyLights);         // there's position
       save = shuffle[i];
       shuffle[i] = shuffle[j];       // first swap
       shuffle[j] = save;             // second swap
     }
   }
   
-  for (i=0; i < numLights; i++) {
+  for (i=0; i < bodyLights; i++) {
     if (i < pos) {  
-      setPixelColor(shuffle[i], Wheel(foreColor));  // Turning on lights one at a time
+      setPixel(shuffle[i], foreColor);  // Turning on lights one at a time
     } else { 
-      setPixelColor(shuffle[numLights-(i % numLights)-1], Color(0,0,0));  // Turning off lights one at a time
+      setPixelBlack(shuffle[i]);  // Turning off lights one at a time
     }
   }
+  setHead(foreColor);
 }  
 
 // random colors
@@ -239,13 +417,109 @@ void randomcolors() {
   
   if (cycle == 0) {  // Start of show: assign lights to random colors
     for (i=0; i < numLights; i++) {
-      shuffle[i] = random(MaxColor);
+      shuffle[i] = random(maxColor);
     }
   }
   
   // Otherwise, fill lights with their color
   for (i=0; i < numLights; i++) {
-    setPixelColor(i, Wheel(shuffle[i]));
+    setPixel(i, shuffle[i]);
+  }
+}
+
+// colorsize
+//
+// Light each cone according to its cone size
+//
+void colorsize() {
+  for (int i=0; i < numLights; i++) {
+    setPixel(i, IncColor(foreColor, ((ConeSize[i]-1) * backColor) % maxColor));
+  }
+  foreColor = IncColor(foreColor, 40);
+}
+
+// calcIntensity
+//
+// Use sine wave + cycle + variable to calculate intensity
+float calcIntensity(byte x, byte max_x) {
+  return sin(3.14 * ((cycle + x) % max_x) / (max_x - 1));
+}
+
+// brightsize
+//
+// Light just one cone size
+//
+void brightsize() {
+  float intensity;
+  for (int i=0; i < bodyLights; i++) {
+    setPixelColor(i, Gradient_Wheel(backColor, calcIntensity(ConeSize[i]-1, 5)));
+  }
+  setHead(foreColor);
+}
+
+void stripe() {
+  for (int i=0; i < numLights; i++) {
+    if (Stripe_Pattern[PatternLookUp[i]] == 0) {
+      setPixel(i, foreColor);
+    } else {
+      setPixel(i, backColor);
+    }
+  }
+  backColor = IncColor(backColor, 50);
+}
+
+void alternate() {
+  for (int i=0; i < numLights; i++) {
+    if (Alternate_Pattern[PatternLookUp[i]]) {
+      setPixel(i, foreColor);
+    } else {
+      setPixel(i, backColor);
+    }
+  }
+  foreColor = IncColor(foreColor, 75);
+}
+
+void diagcolor() {
+  for (int i=0; i < numLights; i++) {
+    setPixel(i, IncColor(foreColor, (backColor * PatternLookUp[ConeLookUp[i]]) % maxColor));
+  }
+}
+
+void sectioncolor() {
+  for (int i=0; i < numLights; i++) {
+    setPixel(i, IncColor(foreColor, (backColor * PatternLookUp[ConeLookUp[i]]) % maxColor));
+  }
+}
+
+void sidesidecolor() {
+  for (int i=0; i < numLights; i++) {
+    setPixel(i, IncColor(backColor, (foreColor * PatternLookUp[ConeLookUp[i]]) % maxColor));
+  }
+}
+
+void explodecolor() {
+  for (int i=0; i < numLights; i++) {
+    setPixel(i, IncColor(backColor, (foreColor * PatternLookUp[ConeLookUp[i]]) % maxColor));
+  }
+}
+
+void diagbright() {
+  for (int i=0; i < bodyLights; i++) {
+    setPixelColor(i, Gradient_Wheel(backColor, calcIntensity(Diag_Pattern[PatternLookUp[i]], 9)));
+  }
+  setHead(foreColor);
+}
+
+void sidesidebright() {
+  for (int i=0; i < bodyLights; i++) {
+    setPixelColor(i, Gradient_Wheel(foreColor, calcIntensity(SideSide_Pattern[PatternLookUp[i]], 7)));
+  }
+  setHead(foreColor);
+}
+
+void explodebright() {
+  for (int i=0; i < bodyLights; i++) {
+    setPixelColor(i, Gradient_Wheel(foreColor, calcIntensity(5 - Explode_Pattern[PatternLookUp[i]], 6)));
   }
 }
 
@@ -254,55 +528,12 @@ void randomcolors() {
 // alternates the color of pixels between two colors
 //
 void twocolor() {
-  for (int i=0; i < symLights; i++) {
-    if (i%2) setSymPixelColor(i, Wheel(foreColor));
-    else setSymPixelColor(i, Wheel(backColor));
-  }
-}
-
-//
-// Morph Chain
-//
-// Morphs color 1 from position x to
-// color 2 at position x+n
-
-void morphChain() {
-  float attenuation;
-  
-  for (int i=0; i < symLights; i++) {
-    attenuation = ((i+(cycle%symLights)) % symLights)/(float)(symLights-1);
-    setSymPixelColor(i, HSVinter24(Wheel(foreColor),Wheel(backColor), attenuation));
-  }
-}
-
-//
-// Saw tooth
-//
-// Fills in pixels with a sawtooth of intensity
-//
-// Peak of the sawtooth moves with the cycle
-
-void sawtooth() {
-  float attenuation;
-  
-  for (int i=0; i < symLights; i++) {
-    attenuation = 2*(((i+(cycle%symLights)) % symLights)/(float)(symLights-1));
-    if (attenuation > 1) attenuation = 2 - attenuation;  // the '2 -' creates the sawtooth
-    attenuation = attenuation * attenuation;  // magnify effect - color brightness is not linear
-    setSymPixelColor(i, HSVinter24(Color(0,0,0), Wheel(foreColor), attenuation));
-  }
-}
-
-//
-// rainbowshow: fills the spines with a gradient rainbow
-// over time, the starting color changes
-//
- 
-void rainbowshow(int cycles) {
-  int diff = abs(foreColor - backColor);
-  
-  for (int i=0; i < symLights; i++) {
-    setSymPixelColor( (i+(cycle%symLights)) % symLights, Wheel(((i*diff / symLights)+foreColor) % diff) );
+  for (int i=0; i < numLights; i++) {
+    if (i%2) {
+      setPixel(i, foreColor);
+    } else {
+      setPixel(i, backColor);
+    }
   }
 }
 
@@ -312,38 +543,43 @@ void rainbowshow(int cycles) {
 // Just one pixel traveling along the chain
  
 void lightwave() {
- 
-  for (int i=0; i < symLights; i++) {
-     if (i == symLights-(cycle % symLights)-1) setSymPixelColor(i, Wheel(foreColor));
-     else setSymPixelColor(i, Color(0,0,0));
+  for (int i=0; i < bodyLights; i++) {
+     if (i == bodyLights-(cycle % bodyLights)-1) {
+       setPixel(ConeLookUp[i], foreColor);
+     } else {
+       setPixelBlack(ConeLookUp[i]);
+     }
   }
+  setHead(foreColor);
 }
 
 //
 // lightrunup
 //
-// lights fill up one at time
-// 
+// Wave filling in and out
+
 void lightrunup() {
-  int pos = cycle % (symLights*2);  // Where we are in the show
-  if (pos >= symLights) pos = (symLights*2) - pos - 1;
+  int i, pos;
   
-  for (int i=0; i < symLights; i++) {
-    if (i <= pos) {
-      setSymPixelColor(i, Wheel(foreColor));  // Turning on lights one at a time
+  pos = cycle % (bodyLights*2);  // Where we are in the show
+  if (pos >= bodyLights) {
+    pos = (bodyLights*2) - pos;  // For a sawtooth effect
+  }
+  
+  for (i=0; i < bodyLights; i++) {
+    if (i < pos) {
+      setPixelBlack(ConeLookUp[i]);
     } else {
-      setSymPixelColor(i, Color(0,0,0));   // black
+      setPixel(ConeLookUp[i], foreColor);
     }
   }
+  setHead(foreColor);
 }
     
 //
 // Frame displays. Basically gradually changes image from previous frame to next frame.
-// More pleasing to the eye.
+// More pleasing to the eye
 //
-// Code initially from Greg and Robie
-//
-
 void morph_frame() {
    for (int i = 0; i < numLights; i++) {
      strip.setPixelColor(i, HSVinter24(current_frame[i], next_frame[i], (float)morph/GetDelayTime(wait)));
@@ -352,19 +588,36 @@ void morph_frame() {
 }
 
 //
-// set SymPixelColor(int pos, uint32_t color) {
+// setPixel
 //
-// Forces the two earwings to have symmetric pixels
-
-void setSymPixelColor(int pos, uint32_t color) {
-  pos = pos % symLights;
-  
-  next_frame[pos] = color;
-  next_frame[numLights - pos - 1] = color; 
+void setPixel(byte pos, int color) {
+  next_frame[pos] = Wheel(color);
 }
 
-void setPixelColor(int pos, uint32_t color) {
+void setPixelColor(byte pos, uint32_t color) {
   next_frame[pos] = color;
+}
+
+void setPixelBlack(byte pos) {
+  next_frame[pos] = Color(0,0,0);
+}
+
+void setHead(int color) {
+  next_frame[42] = Wheel(color);
+  next_frame[43] = Wheel(color);
+  next_frame[44] = Wheel(color);
+}
+ 
+//
+// IncColor
+//
+// Adds amount to color
+//
+int IncColor(int color, int amount) {
+  int value = color + amount;
+  while (value < 0) value += maxColor;
+  while (value >= maxColor) value -= maxColor;
+  return value;
 }
 
 //
@@ -374,7 +627,7 @@ void setPixelColor(int pos, uint32_t color) {
 //
  
 int GetDelayTime(int wait) {
-  int DelayValues[MAX_WAIT] = { 2, 3, 4, 6, 8, 10, 15, 20, 30, 50, 75, 100 };
+  int DelayValues[MAX_WAIT] = { 6, 8, 10, 15, 20, 30, 50, 75, 100, 150, 200, 250 };
   return (DelayValues[wait % MAX_WAIT]);
 }
 
@@ -436,7 +689,7 @@ uint32_t Gradient_Wheel(int color, float intensity)
   int r,g,b;
   int channel, value;
   
-  color = color % MaxColor;  // Keep colors within bounds  
+  color = color % maxColor;  // Keep colors within bounds  
   
   channel = color / 256;
   value = color % 256;
@@ -581,7 +834,7 @@ void HSVtoRGB( byte *r, byte *g, byte *b, float h, float s, float v )
 //  Wrapper for HSV Interpolate RGB below
 //  start and end colors are 0-255 wheel colors
 
-uint32_t HSVinterWheel(byte c1, byte c2, float fract)
+uint32_t HSVinterWheel(int c1, int c2, float fract)
 {
   return(HSVinter24(Wheel(c1),Wheel(c2),fract));
 }
@@ -608,23 +861,11 @@ uint32_t HSVinter24(uint32_t c1, uint32_t c2, float fract)
 
 uint32_t HSVinterRGB(byte r1, byte g1, byte b1, byte r2, byte g2, byte b2, float fract)
 {  
-  //Serial.print("r1 = ");
-  //Serial.print(r1);
-  //Serial.print(", g1 = ");
-  //Serial.print(g1);
-  //Serial.print(", b1 = ");
-  //Serial.print(b1);
-  //Serial.print("r2 = ");
-  //Serial.print(r2);
-  //Serial.print(", g2 = ");
-  //Serial.print(g2);
-  //Serial.print(", b2 = ");
-  //Serial.println(b2);
-  
-  if (fract < 0 || fract > 1) {
-     Serial.print("fract = ");
-     Serial.println(fract);
-     return(Color(255,0,0));  // Fract is out of 0-1 bounds. Color defaults to red
+  if (fract < 0) {
+     fract = 0;
+  }
+  if (fract > 1) {
+    fract = 1;
   }
   // Check to see if either 1 or 2 are black. If black, just attenuate the other color.
    
@@ -670,24 +911,9 @@ uint32_t HSVinterRGB(byte r1, byte g1, byte b1, byte r2, byte g2, byte b2, float
   
   HSVtoRGB(p_r,p_g,p_b,hi,si,vi);
   
-  // Print test bed
-  /*
-  Serial.print("r1 = ");
-  Serial.print(r1);
-  Serial.print(", g1 = ");
-  Serial.print(g1);
-  Serial.print(", b1 = ");
-  Serial.print(b1);
-  Serial.print(", r = ");
-  Serial.print(r);
-  Serial.print(", g = ");
-  Serial.print(g);
-  Serial.print(", b = ");
-  Serial.println(b);
-  */
-  // Return the proper 24-bit color
-   
-  return(Color(r,g,b));
+  float BRIGHTNESS = 0.25;
+  
+  return(Color(r * BRIGHTNESS, g * BRIGHTNESS, b * BRIGHTNESS));
 }
 
 //
@@ -696,7 +922,7 @@ uint32_t HSVinterRGB(byte r1, byte g1, byte b1, byte r2, byte g2, byte b2, float
 //  Wrapper for RGB Interpolate RGB below
 //  start and end colors are 0-255 wheel colors
 
-uint32_t RGBinterWheel(byte c1, byte c2, float fract)
+uint32_t RGBinterWheel(int c1, int c2, float fract)
 {
   return(RGBinter24(Wheel(c1),Wheel(c2),fract));
 }

@@ -640,6 +640,8 @@ uint32_t Gradient_Wheel(int color, float intensity)
   if (intensity > 1) intensity = 1;
   if (intensity < 0) intensity = 0;
   
+  intensity *= 0.25;
+  
   switch(channel)
   {
     case 0:

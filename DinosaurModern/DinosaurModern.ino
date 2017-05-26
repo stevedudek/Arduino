@@ -10,8 +10,8 @@
 //
 // 2 pins for clock and data of lights.
 // 
-#define dataPin 9       // 'yellow' wire
-#define clockPin 8      // 'green' wire
+#define dataPin 8       // 'yellow' wire
+#define clockPin 9      // 'green' wire
 
 #define numLights 25      // number of spikes
 
