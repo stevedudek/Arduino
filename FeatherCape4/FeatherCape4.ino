@@ -37,7 +37,7 @@ Adafruit_WS2801 strip = Adafruit_WS2801(48, dataPin, clockPin);
 boolean ONLY_RED = false; // true = use only red colors
 #define MAIN_COLOR 120  // MAIN_COLOR=120, green=450
 boolean USE_DIMMER = false;  // true = use dimmer
-float BRIGHTNESS = 0.50;  // 0.0 - 1.0 brightness level
+float BRIGHTNESS = 0.75;  // 0.0 - 1.0 brightness level
 int BLINK_FACTOR = 1;     // how fast blinking (1 = fast, higher = slower)
 
 // Light colors
@@ -93,6 +93,9 @@ byte PetalLookUp[38] = {
   43, 42, 41, 40,
     45, 46, 47
 };
+
+#define NUM_SPACERS 10
+byte SpacerPixels[NUM_SPACERS] = { 3, 8, 12, 17, 21, 26, 30, 35, 39, 44 };
 
 byte PetalGrid[11][4] = {
  {    0,  1,  2,   38},
@@ -850,6 +853,10 @@ void morph_frame() {
    }
    for (int i = 0; i < numLights; i++) {
      strip.setPixelColor(PetalLookUp[i], RGBinter24(current_frame[i], next_frame[i], fract));
+   }
+   // Make sure spacer pixels are off
+   for (int i = 0; i < NUM_SPACERS; i++) {
+     strip.setPixelColor(SpacerPixels[i], 0);
    }
    strip.show();  // Update the display 
 }

@@ -33,7 +33,7 @@
 boolean ONLY_RED = false; // true = use only red colors
 boolean USE_DIMMER = false;  // true = use dimmer
 float BRIGHTNESS = 0.50;  // 0.0 - 1.0 brightness level
-int BLINK_FACTOR = 1;     // how fast blinking (1 = fast, higher = slower)
+int BLINK_FACTOR = 2;     // how fast blinking (1 = fast, higher = slower)
 
 // Dimmer
 #define dimmerPin 5
@@ -55,14 +55,45 @@ byte ConeLookUp[numLights] = { 0,1,2,3,4,15,14,13,12,11,22,23,24,
                                 5,6,7,8,9,10,
                                 16,17,18,19,20,21 };
 
-byte ConeSize[25] = { 5,4,3,2,1,1,1,1,1,2,3,4,5,
+byte ConeSize[numLights] = { 5,4,3,2,1,1,1,1,1,2,3,4,5,
                       0,0,0,0,0,0,
                       0,0,0,0,0,0 };
 
-byte Stripe_Pattern[25] = { 1,1,1,1,1,1,1,1,1,1,1,1,
-                            0,0,0,0,0,0,
-                            0,0,0,0,0,0 };
-                   
+byte ArrowPattern[numLights] = 
+{ 1, 0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+                7, 6, 5, 4, 3, 2,
+                7, 6, 5, 4, 3, 2 };
+
+#define NUM_PATTERNS 6   // Total number of patterns
+
+byte PatternMatrix[NUM_PATTERNS][numLights] = {
+{ 1, 1, 1, 1, 2, 1, 2, 1, 2, 1, 2, 1,
+                2, 1, 2, 1, 2, 1,
+                2, 1, 2, 1, 2, 1 },
+                
+{ 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2,
+                2, 1, 2, 1, 2, 1,
+                1, 2, 1, 2, 1, 2 },
+
+{ 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2,
+                1, 2, 1, 2, 1, 2,
+                2, 1, 2, 1, 2, 1 },
+
+{ 2, 2, 2, 2, 1, 2, 1, 2, 1, 2, 1, 2,
+                2, 1, 2, 1, 2, 1,
+                2, 1, 2, 1, 2, 1 },
+
+{ 2, 2, 2, 2, 2, 1, 2, 2, 1, 2, 2, 2,
+                2, 2, 1, 2, 2, 1,
+                2, 2, 1, 2, 2, 1 },
+
+{ 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+                1, 1, 1, 1, 1, 1,
+                1, 1, 1, 1, 1, 1 },
+                
+};
+
+                
 // Light colors
 
 int foreColor =   0;     // Starting foreground color
@@ -71,8 +102,8 @@ int backColor = 500;     // Starting background color
 
 // Shows
 
-int show = 1;       // Starting show
-#define MAX_SHOW 8  // Total number of shows
+int show = 0;       // Starting show
+#define MAX_SHOW 12  // Total number of shows
 
 int morph = 0;      // Keeps track of morphing steps (morph clock - minute hand)
 int cycle = 0;      // Keeps track of animation (cycle clock - hour hand)
@@ -149,7 +180,10 @@ void loop() {
         brightsize();
         break;
       case 10:
-        stripe();
+        colorarrow();
+        break;
+      case 11:
+        brightarrow();
         break;
     }
   }
@@ -180,11 +214,14 @@ void loop() {
   }
   
   if (!random(10000)) {
-    show = (show + 1) % MAX_SHOW;
+    show = random(MAX_SHOW);
     morph = 0;
     cycle = 0;
     clearWithFade();
-    delay(1000 * random(5,10));  // Dark for n-m seconds
+    delay(random(5,10) * 1000);
+    patterns(random(5,10) * 100); // Pattern shows!
+    clearWithFade();
+    delay(random(5,10) * 1000);
   }
   
   if (!random(1000)) {
@@ -302,17 +339,36 @@ void twocolor() {
 }
 
 //
-// Stripe - center cones are different from left and right cones
+// patterns shows
 //
-void stripe() {
-  for (int i = 0; i < numLights; i++) {
-    if (Stripe_Pattern[i] == 0) {
-      setPixel(i, foreColor);
-    } else {
-      setPixel(i, backColor);
-    }
-  }
-  backColor = IncColor(backColor, 50);
+void patterns(int cycles) {
+  int pattern = random(0, NUM_PATTERNS);    // Pick a random pattern
+  int i, ticks = 0;
+  
+  while (ticks++ < cycles) {
+      if (!random(10)) {       // The not-MAIN_COLOR color
+        foreColor = IncColor(foreColor, 10); 
+      }
+        
+      for (i=0; i < numLights; i++) {
+        switch (PatternMatrix[pattern][i]) {
+          case 0: {        // Off (black)
+            strip.setPixelColor(ConeLookUp[i], Color(0,0,0));
+            break;
+          }
+          case 1: {        // backColor
+            strip.setPixelColor(ConeLookUp[i], Wheel(backColor));
+            break;
+          }
+          case 2: {        // foreColor
+            strip.setPixelColor(ConeLookUp[i], Wheel(foreColor));
+            break;
+          }
+        }
+      }
+      strip.show();
+      delay(10);
+  }  
 }
 
 //
@@ -350,7 +406,7 @@ void sawtooth() {
 //
 void colorsize() {
   for (int i=0; i < numLights; i++) {
-    setPixel(i, IncColor(foreColor, ((ConeSize[i]) * backColor) % MaxColor));
+    setPixel(i, IncColor(foreColor, ((ArrowPattern[i]) * backColor) % MaxColor));
   }
   foreColor = IncColor(foreColor, 40);
 }
@@ -359,6 +415,26 @@ void colorsize() {
 // brightsize -Light just one cone size at a time
 //
 void brightsize() {
+  float intensity;
+  for (int i=0; i < numLights; i++) {
+    setPixelColor(i, Gradient_Wheel(backColor, calcIntensity(ArrowPattern[i], 9)));
+  }
+}
+
+//
+// colorarrow - light each cone according to its arrow position
+//
+void colorarrow() {
+  for (int i=0; i < numLights; i++) {
+    setPixel(i, IncColor(foreColor, ((ConeSize[i]) * backColor) % MaxColor));
+  }
+  foreColor = IncColor(foreColor, 40);
+}
+
+//
+// brightarrow -Light just one arrow piece at a time
+//
+void brightarrow() {
   float intensity;
   for (int i=0; i < numLights; i++) {
     setPixelColor(i, Gradient_Wheel(backColor, calcIntensity(ConeSize[i], 5)));

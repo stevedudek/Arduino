@@ -31,7 +31,7 @@ boolean USE_DIMMER = false;  // false = turn off dimmer capability
 int dimmerValue = 1024;
 #define MIN_DIMMER_CHANGE 0.1 // fractional minumum recognized by the dimmer
 
-float BRIGHTNESS = 0.50;  // 0.0 - 1.0 brightness level
+float BRIGHTNESS = 1.0;  // 0.0 - 1.0 brightness level
 
 // framebuffers
 uint32_t current_frame[numLights];
@@ -164,7 +164,7 @@ void loop() {
     morph = 0;
     cycle = 0;
     clearWithFade();
-    delay(1000 * random(5,30));  // Dark for 5-30 seconds
+    delay(1000 * random(20,30));  // Dark for 5-30 seconds
   }
   
   if (!random(1000)) {
@@ -682,6 +682,8 @@ uint32_t HSVinterWheel(byte c1, byte c2, float fract)
 
 uint32_t HSVinter24(uint32_t c1, uint32_t c2, float fract)
 {
+  if (fract <= 0.0) return c1;
+  if (fract >= 1.0) return c2;
   return(HSVinterRGB(GetRed(c1),GetGreen(c1),GetBlue(c1), GetRed(c2),GetGreen(c2),GetBlue(c2), fract));
 }
 

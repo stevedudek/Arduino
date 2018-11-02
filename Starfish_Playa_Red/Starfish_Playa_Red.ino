@@ -3,7 +3,7 @@
 #include "SPI.h"
 #include "Adafruit_WS2801.h"
 
-//  8/16/14
+//  6/15/17
 //
 //  Starfish
 ///
@@ -51,7 +51,7 @@ float brightness = 1;  // Brightness of the overall piece
 // Shows
 
 int show = 0;       // Starting show
-#define MAX_SHOW 17  // Total number of shows
+#define MAX_SHOW 16  // Total number of shows
 
 int morph = 0;      // Keeps track of morphing steps (morph clock - minute hand)
 int cycle = 0;      // Keeps track of animation (cycle clock - hour hand)
@@ -62,7 +62,7 @@ boolean active = true;  // flag tells whether lights should be off
 #define UPDATE_FREQ 1000      // How often the master sends out data in ms
 
 // Delays
-int wait = 6;
+int wait = 0;
 #define MAX_WAIT 12 // Number of stored delay times 
 
 // Timing variables for xBee communication
@@ -202,9 +202,6 @@ void loop() {
       case 15:
         movingarmrunup();
         break;
-      case 16:
-        clear();
-        break;
     }
   }
   
@@ -250,16 +247,7 @@ void loop() {
     cycle = 0;
     clearWithFade();
     
-    // Always on
-    show = random(MAX_SHOW - 1);
-    
-    /*
-    if (show == 16) {
-      show = random(MAX_SHOW - 1);
-    } else {
-      show = 16;
-    }
-    */
+    show = random(MAX_SHOW);    
   }
   
   if (!random(1000)) {
@@ -1140,6 +1128,8 @@ uint32_t HSVinterWheel(int c1, int c2, float fract)
 
 uint32_t HSVinter24(uint32_t c1, uint32_t c2, float fract)
 {
+  if (fract <= 0.0) return c1;
+  if (fract >= 1.0) return c2;
   return(HSVinterRGB(GetRed(c1),GetGreen(c1),GetBlue(c1), GetRed(c2),GetGreen(c2),GetBlue(c2), fract));
 }
 

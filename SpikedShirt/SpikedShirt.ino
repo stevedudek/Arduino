@@ -426,15 +426,18 @@ uint32_t Wheel(int color)
   return Gradient_Wheel(color, 1);  // Intensity = 1
 }
 
-// Input a value 256 * 6 to get a color value.
-// The colours are a transition r - g -b - back to r
-// Intensity must be 0 <= intensity <= 1
+//Input a value 256 * 6 to get a color value.
+//The colours are a transition r - g -b - back to r
+//Intensity must be 0 <= intensity <= 1
 uint32_t Gradient_Wheel(int color, float intensity)
 {
   int r,g,b;
   int channel, value;
   
-  color = color % MaxColor;  // Keep colors within bounds  
+  color = color % MaxColor;  // Keep colors within bounds
+  
+  // Red party
+  color = color * 2 / 3;  // Break color into 4 (not 6) channels
   
   channel = color / 256;
   value = color % 256;
@@ -442,6 +445,33 @@ uint32_t Gradient_Wheel(int color, float intensity)
   if (intensity > 1) intensity = 1;
   if (intensity < 0) intensity = 0;
   
+  // Red party - These values are different
+
+  switch(channel)
+  {
+    case 0:
+      r = 255;
+      g = value;
+      b = 0;        
+      break;
+    case 1:
+      r = 255;
+      g = 255 - value;
+      b = 0;        
+      break;
+    case 2:
+      r = 255;
+      g = 0;
+      b = value;        
+      break;
+    default:
+      r = 255;
+      g = 0;
+      b = 255 - value;        
+      break;
+   }
+
+/*  This is the usual wheel
   switch(channel)
   {
     case 0:
@@ -475,6 +505,7 @@ uint32_t Gradient_Wheel(int color, float intensity)
       b = 255 - value;        
       break; 
    }
+   */
   return(Color(r * intensity, g * intensity, b * intensity));
 }
  
