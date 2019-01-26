@@ -512,7 +512,7 @@ void vert_back_forth_bands() {
       temp_x = x + FISH_XGRID;
       temp_x = (y % 2) ? temp_x : MAX_XGRID - temp_x - 1;
       temp_x = (temp_x + cycle) % MAX_XGRID;
-      intensity = sin8_avr(map(temp_x, 0, MAX_XGRID, 0, 255) + (cycle % (255 / MAX_XGRID)) );
+      intensity = sin8(map(temp_x, 0, MAX_XGRID, 0, 255) + (cycle % (255 / MAX_XGRID)) );
       led.setPixelColor(led.getLedFromCoord(x,y), led.gradient_wheel(shows.getBackColor(), intensity));
     }
   }
@@ -531,7 +531,7 @@ void vert_back_forth_colors() {
       temp_x = x + FISH_XGRID;
       temp_x = (y % 2) ? temp_x : MAX_XGRID - temp_x - 1;
       temp_x = (temp_x + cycle) % MAX_XGRID;
-      hue = sin8_avr(map(temp_x, 0, MAX_XGRID, shows.getForeColor(), shows.getBackColor()) + (cycle % (255 / MAX_XGRID)) );
+      hue = sin8(map(temp_x, 0, MAX_XGRID, shows.getForeColor(), shows.getBackColor()) + (cycle % (255 / MAX_XGRID)) );
       led.setPixelHue(led.getLedFromCoord(x,y), hue);
     }
   }
@@ -570,7 +570,7 @@ void horiz_back_forth_bands() {
       temp_y = y + FISH_YGRID;
       temp_y = (x % 2) ? temp_y : MAX_YGRID - temp_y - 1;
       temp_y = (temp_y + cycle) % MAX_YGRID;
-      intensity = sin8_avr(map(temp_y, 0, MAX_YGRID, 0, 255) + (cycle % (255 / MAX_YGRID)) );
+      intensity = sin8(map(temp_y, 0, MAX_YGRID, 0, 255) + (cycle % (255 / MAX_YGRID)) );
       led.setPixelColor(led.getLedFromCoord(x,y), led.gradient_wheel(shows.getBackColor(), intensity));
     }
   }
@@ -589,7 +589,7 @@ void horiz_back_forth_colors() {
       temp_y = y + FISH_YGRID;
       temp_y = (x % 2) ? temp_y : MAX_YGRID - temp_y - 1;
       temp_y = (temp_y + cycle) % MAX_YGRID;
-      hue = sin8_avr(map(temp_y, 0, MAX_YGRID, shows.getForeColor(), shows.getBackColor()) + (cycle % (255 / MAX_YGRID)) );
+      hue = sin8(map(temp_y, 0, MAX_YGRID, shows.getForeColor(), shows.getBackColor()) + (cycle % (255 / MAX_YGRID)) );
       led.setPixelHue(led.getLedFromCoord(x,y), hue);
     }
   }
@@ -632,7 +632,7 @@ void diag_back_forth_bands() {
       temp_x = (y % 2) ? temp_x : MAX_XGRID - temp_x - 1;
       temp_y = (x % 2) ? temp_y : MAX_YGRID - temp_y - 1;
       temp = (temp_x + temp_y + cycle) % MAX_YGRID;
-      intensity = sin8_avr(map(temp, 0, MAX_YGRID, 0, 255) + (cycle % (255 / MAX_YGRID)) );
+      intensity = sin8(map(temp, 0, MAX_YGRID, 0, 255) + (cycle % (255 / MAX_YGRID)) );
       led.setPixelColor(led.getLedFromCoord(x,y), led.gradient_wheel(shows.getBackColor(), intensity));
     }
   }
@@ -653,7 +653,7 @@ void diag_back_forth_colors() {
       temp_x = (y % 2) ? temp_x : MAX_XGRID - temp_x - 1;
       temp_y = (x % 2) ? temp_y : MAX_YGRID - temp_y - 1;
       temp = (temp_x + temp_y + cycle) % MAX_YGRID;
-      hue = sin8_avr(map(temp, 0, MAX_YGRID, shows.getForeColor(), shows.getBackColor()) + (cycle % (255 / MAX_YGRID)) );
+      hue = sin8(map(temp, 0, MAX_YGRID, shows.getForeColor(), shows.getBackColor()) + (cycle % (255 / MAX_YGRID)) );
       led.setPixelHue(led.getLedFromCoord(x,y), hue);
     }
   }

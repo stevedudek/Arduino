@@ -16,7 +16,7 @@
 #define dataPin 9       // 'yellow' wire
 #define clockPin 8      // 'green' wire
 
-#define numLights 18      // number of spikes
+#define numLights 2      // number of spikes
 
 // framebuffers
 uint32_t current_frame[numLights];

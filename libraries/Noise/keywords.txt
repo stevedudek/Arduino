@@ -12,21 +12,14 @@ Noise	KEYWORD1
 # Methods and Functions (KEYWORD2)
 #######################################
 
-turnNoiseOn    KEYWORD2
-turnNoiseOff    KEYWORD2
-isNoiseOn    KEYWORD2
-getRawNoiseA    KEYWORD2
-getRawNoiseB    KEYWORD2
-getScaledNoiseA    KEYWORD2
-getScaledNoiseB    KEYWORD2
-addNoiseAtoValue    KEYWORD2
-addNoiseBtoValue    KEYWORD2
-addNoiseAtoValueNoWrap    KEYWORD2
-addNoiseBtoValueNoWrap    KEYWORD2
-setRandomNoiseParams    KEYWORD2
-fillNoise    KEYWORD2
-setMaxA    KEYWORD2
-setMaxB    KEYWORD2
+turnNoiseOn, turnNoiseOff, isNoiseOn,
+getRawNoiseA, getRawNoiseB,
+getScaledNoiseA, getScaledNoiseB,
+addNoiseAtoValue, addNoiseBtoValue,
+addNoiseAtoValueNoWrap, addNoiseBtoValueNoWrap,
+setRandomNoiseParams,
+fillNoise,
+setMaxA, setMaxB	KEYWORD2
 
 #######################################
 # Instances (KEYWORD2)

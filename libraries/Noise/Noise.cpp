@@ -1,5 +1,5 @@
 //
-//  Noise.cpp - 1D & 2D Perlin Noise
+//  Noise.cpp - 1D Perlin Noise
 //
 #include <FastLED.h>  // Need this library for math functions
 
@@ -8,39 +8,34 @@
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
 
 //
-// Constructors
+// Constructor: Noise (1D length, max noise A (0-255), max noise b (0-255) )
 //
-
-// 1D
-Noise::Noise(uint8_t x)
+Noise::Noise(uint8_t x_length, uint8_t max_noise_a, uint8_t max_noise_b)
 {
-  uint8_t y = 2;  // 1D noise has 2 noise rows for channels A + B
-  init_noise(x, y);
-}
+  _x_length = x_length;
+  _max_noise_a = max_noise_a;
+  _max_noise_b = max_noise_b;
+  _noise_x = random16();
+  _noise_y = random16();
+  _noise_z = random16();
+  noise_values = (uint8_t *)calloc(x_length, 2);  // Assign 2 bytes per x-length
 
-// 2D
-Noise::Noise(uint8_t x, uint8_t y)
-{
-  init_noise(x, y);
+  turnNoiseOn();
+  setRandomNoiseParams();
+  fillNoise();
 }
-
-// 0D - dummy/empty Noise
-Noise::Noise()
-{
-}
-
 
 //
 // Public Methods //////////////////////////////////////////////////////////////
 //
 void Noise::turnNoiseOn(void)
 {
-  _noise_on = true;
+  _noise_on = True;
 }
 
 void Noise::turnNoiseOff(void)
 {
-  _noise_on = false;
+  _noise_on = False;
 }
 
 bool Noise::isNoiseOn(void)
@@ -48,115 +43,93 @@ bool Noise::isNoiseOn(void)
   return _noise_on;
 }
 
-// Limit Noise channels A+B to Values (0-255, 0-255)
-void Noise::setMaxNoise(uint8_t max_noise_a, uint8_t max_noise_b)
+void Noise::setMaxNoise(uint8_t max_noise_a, max_noise_b)
 {
   _max_noise_a = max_noise_a;
   _max_noise_b = max_noise_b;
 }
 
-// Get 1D Raw Noise from channel A (0-255)
-uint8_t Noise::getRawNoiseA(uint8_t x)
+void Noise::setMaxNoise()
 {
-  uint8_t y = 0;
-  return getRawNoiseA(x,y);
+  setMaxNoise(64, 64);  // max_noise_a (hue), max_noise_b (saturation)
 }
 
-// Get 1D Raw Noise from channel B (0-255)
-uint8_t Noise::getRawNoiseB(uint8_t x)
+// Limit Noise channel A to Value (0-255)
+void Noise::setMaxA(uint8_t max_noise_a)
 {
-  uint8_t y = 0;
-  return getRawNoiseB(x,y);
+  _max_noise_a = max_noise_a;
 }
 
-// Get 2D Raw Noise from channel A (0-255)
-uint8_t Noise::getRawNoiseA(uint8_t x, uint8_t y)
+// Limit Noise channel B to Value (0-255)
+void Noise::setMaxB(uint8_t max_noise_b)
 {
-  return getNoiseValue(x,y);
+  _max_noise_b = max_noise_b;
 }
 
-// Get 2D Raw Noise from channel B (0-255)
-uint8_t Noise::getRawNoiseB(uint8_t x, uint8_t y)
+// Get Raw Noise from channel A (0-255)
+uint8_t Noise::getRawNoiseA(uint8_t i)
 {
-  return getNoiseValue(_max_x - x - 1, _max_y - y - 1);
+  return getNoiseValue(0, i);
+}
+
+// Get Raw Noise from channel B (0-255)
+uint8_t Noise::getRawNoiseB(uint8_t i)
+{
+  return getNoiseValue(1, _x_length - i - 1);
 }
 
 // Get Scaled Noise from channel A (0 - max_noise_a)
-uint8_t Noise::getScaledNoiseA(uint8_t x)
+uint8_t Noise::getScaledNoiseA(uint8_t i)
 {
-  return map8(getRawNoiseA(x), 0, _noise_a_intense);
+  return map8(getRawNoiseA(i), 0, _noise_a_intense);
 }
 
 // Get Scaled Noise from channel B (0 - max_noise_b)
-uint8_t Noise::getScaledNoiseB(uint8_t x)
+uint8_t Noise::getScaledNoiseB(uint8_t i)
 {
-  return map8(getRawNoiseB(x), 0, _noise_b_intense);
+  return map8(getRawNoiseB(i), 0, _noise_b_intense);
 }
 
-// Get 2D Scaled Noise from channel A (0 - max_noise_a)
-uint8_t Noise::getScaledNoiseA(uint8_t x, uint8_t y)
+// Add Scaled Channel A noise at pixel i to value (will wrap)
+uint8_t Noise::addNoiseAtoValue(uint8_t i, uint8_t value)
 {
-  return map8(getRawNoiseA(x,y), 0, _noise_a_intense);
+  if (_noise_on == False) {
+    return value;
+  }
+  return addNoiseToValue(value, getScaledNoiseA(i), _noise_a_intense);
 }
 
-// Get 2D Scaled Noise from channel B (0 - max_noise_b)
-uint8_t Noise::getScaledNoiseB(uint8_t x, uint8_t y)
+// Add Scaled Channel B noise at pixel i to value (will wrap)
+uint8_t Noise::addNoiseBtoValue(uint8_t i, uint8_t value)
 {
-  return map8(getRawNoiseB(x,y), 0, _noise_b_intense);
+  if (_noise_on == False) {
+    return value;
+  }
+  return addNoiseToValue(value, getScaledNoiseB(i), _noise_b_intense);
 }
 
-// Add Scaled Channel A noise at pixel x to value (will wrap)
-uint8_t Noise::addNoiseAtoValue(uint8_t x, uint8_t value)
+// Add Scaled Channel A noise at pixel i to value (no wrapping)
+uint8_t Noise::addNoiseAtoValueNoWrap(uint8_t i, uint8_t value)
 {
-  return addNoiseToValue(value, getScaledNoiseA(x), _noise_a_intense);
+  if (_noise_on == False) {
+    return value;
+  }
+  return addNoiseToValueNoWrap(value, getScaledNoiseA(i), _noise_a_intense);
 }
 
-// Add Scaled Channel B noise at pixel x to value (will wrap)
-uint8_t Noise::addNoiseBtoValue(uint8_t x, uint8_t value)
+// Add Scaled Channel B noise at pixel i to value (no wrapping)
+uint8_t Noise::addNoiseBtoValueNoWrap(uint8_t i, uint8_t value)
 {
-  return addNoiseToValue(value, getScaledNoiseB(x), _noise_b_intense);
+  if (_noise_on == False) {
+    return value;
+  }
+  return addNoiseToValueNoWrap(value, getScaledNoiseB(i), _noise_b_intense);
 }
 
-// Add 2D Scaled Channel A noise at pixel (x,y) to value (will wrap)
-uint8_t Noise::addNoiseAtoValue(uint8_t x, uint8_t y, uint8_t value)
-{
-  return addNoiseToValue(value, getScaledNoiseA(x,y), _noise_a_intense);
-}
-
-// Add 2D Scaled Channel B noise at pixel (x,y) to value (will wrap)
-uint8_t Noise::addNoiseBtoValue(uint8_t x, uint8_t y, uint8_t value)
-{
-  return addNoiseToValue(value, getScaledNoiseB(x,y), _noise_b_intense);
-}
-
-// Add Scaled Channel A noise at pixel x to value (no wrapping)
-uint8_t Noise::addNoiseAtoValueNoWrap(uint8_t x, uint8_t value)
-{
-  return addNoiseToValueNoWrap(value, getScaledNoiseA(x), _noise_a_intense);
-}
-
-// Add Scaled Channel B noise at pixel x to value (no wrapping)
-uint8_t Noise::addNoiseBtoValueNoWrap(uint8_t x, uint8_t value)
-{
-  return addNoiseToValueNoWrap(value, getScaledNoiseB(x), _noise_b_intense);
-}
-
-// Add 2D Scaled Channel A noise at pixel (x,y) to value (no wrapping)
-uint8_t Noise::addNoiseAtoValueNoWrap(uint8_t x, uint8_t y, uint8_t value)
-{
-  return addNoiseToValueNoWrap(value, getScaledNoiseA(x,y), _noise_a_intense);
-}
-
-// Add 2D Scaled Channel B noise at pixel (x,y) to value (no wrapping)
-uint8_t Noise::addNoiseBtoValueNoWrap(uint8_t x, uint8_t y, uint8_t value)
-{
-  return addNoiseToValueNoWrap(value, getScaledNoiseB(x,y), _noise_b_intense);
-}
-
-// Randomize noise parameters at the start of a show
+//
 void Noise::setRandomNoiseParams(void)
 {
-  if (!isNoiseOn()) {
+  if (_noise_on == False) {
     return;
   }
   _noise_a_intense = random8(_max_noise_a);
@@ -167,23 +140,9 @@ void Noise::setRandomNoiseParams(void)
   _noise_scale = pgm_read_byte_near(noise_param_set + (_noise_set * 2) + 1);
 }
 
-// Make very noisy. Effects will be erased by the next setRandomNoiseParams().
-void Noise::makeVeryNoisy(void)
-{
-  if (!isNoiseOn()) {
-    return;
-  }
-  _noise_a_intense = random8(255);
-  _noise_b_intense = random8(255);
-  _noise_set = random8(ARRAY_SIZE(noise_param_set) / 2);
-
-  _noise_speed = pgm_read_byte_near(noise_param_set + (_noise_set * 2));
-  _noise_scale = pgm_read_byte_near(noise_param_set + (_noise_set * 2) + 1);
-}
-
 void Noise::fillNoise(void)
 {
-  if (!isNoiseOn()) {
+  if (_noise_on == False) {
     return;
   }
   uint8_t dataSmoothing = 0;
@@ -191,13 +150,12 @@ void Noise::fillNoise(void)
     dataSmoothing = 200 - (_noise_speed * 4);
   }
 
-  for(int y = 0; y < _max_y; y++) {
-    int yoffset = _noise_scale * y;
+  for(int i = 0; i < 2; i++) {  // 0 = noise_a, 1 = noise_b
+    int ioffset = _noise_scale * i;
+    for(int j = 0; j < _x_length; j++) {
+      int joffset = _noise_scale * j;
 
-    for(int x = 0; x < _max_x; x++) {
-      int xoffset = _noise_scale * x;
-
-      uint8_t data = inoise8(_noise_x + xoffset, _noise_y + yoffset, _noise_z);
+      uint8_t data = inoise8(_noise_x + ioffset, _noise_y + joffset, _noise_z);
 
       // The range of the inoise8 function is roughly 16-238.
       // These two operations expand those values out to roughly 0..255
@@ -206,12 +164,12 @@ void Noise::fillNoise(void)
       data = qadd8(data,scale8(data,39));
 
       if( dataSmoothing ) {
-        uint8_t olddata = getNoiseValue(x, y);
+        uint8_t olddata = noise_values[i][j];
         uint8_t newdata = scale8( olddata, dataSmoothing) + scale8( data, 256 - dataSmoothing);
         data = newdata;
       }
 
-      setNoiseValue(x, y, data);
+      setNoiseValue(i, j, data);
     }
   }
 
@@ -226,47 +184,24 @@ void Noise::fillNoise(void)
 //
 //  Private Methods //////////////////////////////////////////////////////////////
 //
-void Noise::init_noise(uint8_t x, uint8_t y)
+uint8_t Noise::getNoiseValue(uint8_t i, uint8_t j)
 {
-  _max_x = x;
-  _max_y = y;
-  _max_noise_a = 128;
-  _max_noise_b = 128;
-  _noise_x = random16();
-  _noise_y = random16();
-  _noise_z = random16();
-
-  noise_values = (uint8_t *)calloc(x, y);  // "2D" array that holds noise values
-
-  turnNoiseOn();
-  setRandomNoiseParams();
-  fillNoise();
+  return noise_values[(j*2) + i];
 }
 
-uint8_t Noise::getNoiseValue(uint8_t x, uint8_t y)
+void Noise::setNoiseValue(uint8_t i, uint8_t j, uint8_t value)
 {
-  return noise_values[(y * _max_x) + x];
-}
-
-void Noise::setNoiseValue(uint8_t x, uint8_t y, uint8_t value)
-{
-  noise_values[(y * _max_x) + x] = value;
+  noise_values[(j*2) + i] = value;
 }
 
 uint8_t Noise::addNoiseToValue(uint8_t value, uint8_t noise_amount, uint8_t noise_max)
 {
-  if (!isNoiseOn()) {
-    return value;
-  }
   int new_value = value + (map8(noise_amount, 0, noise_max) / 2) - (noise_max / 2);
   return new_value % 256;
 }
 
 uint8_t Noise::addNoiseToValueNoWrap(uint8_t value, uint8_t noise_amount, uint8_t noise_max)
 {
-  if (!isNoiseOn()) {
-    return value;
-  }
   int new_value = value + (map8(noise_amount, 0, noise_max) / 2) - (noise_max / 2);
   if (new_value >= 255) {
     return 255;

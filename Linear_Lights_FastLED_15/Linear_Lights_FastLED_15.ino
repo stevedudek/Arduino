@@ -12,14 +12,14 @@
 //
 //  10/17/2018
 //
-#define NUM_LEDS 60
+#define NUM_LEDS 2
 
-#define BRIGHTNESS  64 // (0-255)
+#define BRIGHTNESS  255 // (0-255)
 
 #define DELAY_TIME 40 // in milliseconds
 
-#define DATA_PIN 8
-#define CLOCK_PIN 9
+#define DATA_PIN 9
+#define CLOCK_PIN 8
 
 Led led = Led(NUM_LEDS);  // Class instantiation of the Led library
 CRGB leds[NUM_LEDS];  // Hook for FastLED library
@@ -32,13 +32,13 @@ Shows shows = Shows(&led);  // Show library
 uint8_t current_show = 0;
 
 // Clocks and time
-#define SHOW_DURATION 30  // seconds
+#define SHOW_DURATION 300  // seconds
 uint16_t MAX_SMALL_CYCLE = SHOW_DURATION * (1000 / DELAY_TIME);
 #define FADE_OUT_TIME 1   // seconds to fade out
 #define FADE_IN_TIME 1    // seconds to fade out
 
 // noise
-#define HAVE_NOISE true    // set to false to suppress noise
+#define HAVE_NOISE false    // set to false to suppress noise
 Noise noise = Noise(NUM_LEDS);
 
 //

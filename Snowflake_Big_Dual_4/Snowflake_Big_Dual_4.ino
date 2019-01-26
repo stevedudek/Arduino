@@ -11,7 +11,7 @@
 //
 //  Dual shows - Blend together 2 shows running at once
 //
-//  Try to save on memory
+//  Try to save on memory: (USE Snowflake_Big_Dual_4 with Teensy)
 //
 //  Removed: Noise, Shuffle shows, rotating, xBee (restore later?)
 //
@@ -19,8 +19,8 @@
 //  2 CSHV buffers for Channel A + B; these may break the memory bank 
 //  interpolate the two buffers on to the CRGB leds
 //
-#define SNOWFLAKE_SIZE 0  // 0 = Small, 1 = Medium, 2 = Large
-#define SPOKE_LENGTH 8  // 8 = Small, 10 = Medium, 12 = Large
+#define SNOWFLAKE_SIZE 1  // 0 = Small, 1 = Medium, 2 = Large
+#define SPOKE_LENGTH 12  // 8 = Small, 10 = Medium, 12 = Large
 #define NUM_SNOWFLAKE_SIZES 3  // How many sizes of snowflake
 #define ARE_CONNECTED false  // Are Snowflakes talking to each other?
 #define IS_SPEAKING false  // true = speaking, false = hearing
@@ -57,7 +57,7 @@ boolean has_black_pattern[] = { true, true };
 
 // Clocks and time
 #define SHOW_DURATION 30  // seconds. Size problems at 1800+ seconds.
-#define FADE_TIME 5   // seconds to fade in + out
+#define FADE_TIME 10   // seconds to fade in + out
 uint32_t MAX_SMALL_CYCLE = SHOW_DURATION * 2 * (1000 / DELAY_TIME);  // *2! 50% = all on, 50% = all off, and rise + decay on edges
 #define FADE_CYCLES  (FADE_TIME * 1000 / DELAY_TIME)  // cycles to fade in + out
 
@@ -469,9 +469,12 @@ void map_pattern(boolean isOn, uint8_t i, uint8_t channel) {
 // interpolate_leds - interpolate the two leds_buffer[2] object and push result on to leds
 //
 void interpolate_leds() {
+  morph_channels(get_intensity(CHANNEL_A));  // Debugging?
+  
+  /*
   uint8_t intensity_a = get_intensity(CHANNEL_A);
-  uint8_t intensity_b = get_intensity(CHANNEL_B);
-
+  // uint8_t intensity_b = get_intensity(CHANNEL_B);  // Not required!
+  
   if (intensity_a == 0) {
     for (int i = 0; i < NUM_LEDS; i++) {  // Channel A is off. Push Channel B on to Channel A.
       leds[i] = leds_buffer[CHANNEL_B][i];
@@ -481,6 +484,7 @@ void interpolate_leds() {
   } else {
     morph_channels(ease8InOutQuad(intensity_a));
   }
+  */
 }
 
 //

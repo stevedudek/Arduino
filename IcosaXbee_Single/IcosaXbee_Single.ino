@@ -9,9 +9,9 @@
  ******************/
 
 #define datapin   5 // DI
-#define latchpin  6 // LI
-#define enablepin 7 // EI
-#define clockpin  8 // CI
+#define latchpin  8 // LI
+#define enablepin 6 // EI
+#define clockpin  7 // CI
 
 #define NumLEDs    20        // Sides
 #define NumNeigh    3        // Neighbors
