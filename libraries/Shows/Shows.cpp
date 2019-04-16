@@ -23,16 +23,16 @@
 #include "Shows.h"
 
 #define HAS_2D_SHOWS true  // Save memory if you don't need 2D shows
-#define USE_SHUFFLE false  // Save memory if you don't need shuffle functions
+#define USE_SHUFFLE true  // Save memory if you don't need shuffle functions
 
 #define MAX_COLOR  256
 
 #define MAX_PLINKO  10
-#define MAX_BALLS    5
+#define MAX_BALLS    4
 #define MAX_PACKETS  3
 #define TRAIL_SIZE   5
 
-#define SHUFFLE_SIZE  (min(55, numLeds))  // Terrible memory bug if too big
+#define XX 255  // Out of bounds (-1)
 
 //
 // Constructor
@@ -43,16 +43,16 @@ Shows::Shows(Led* led_pointer)
   numLeds = led->getNumLeds();
 
   if (USE_SHUFFLE) {
-    shuffle = (uint8_t *)calloc(SHUFFLE_SIZE, sizeof(uint8_t));  // Uses perhaps too much memory
+    shuffle = (uint8_t *)calloc(numLeds, sizeof(uint8_t));  // Uses perhaps too much memory
   }
 
   // Assign memory for fancy shows - it's not free!
   if (HAS_2D_SHOWS) {
-      plink = (int8_t *)calloc(MAX_PLINKO, sizeof(int8_t));
+      plink = (uint8_t *)calloc(MAX_PLINKO, sizeof(uint8_t));
 
       bounce_dir = (uint8_t *)calloc(MAX_BALLS, sizeof(uint8_t));
       bounce_pos = (uint8_t *)calloc(MAX_BALLS, sizeof(uint8_t));
-      trail = (int8_t *)calloc(MAX_BALLS * TRAIL_SIZE, sizeof(int8_t));
+      trail = (uint8_t *)calloc(MAX_BALLS * TRAIL_SIZE, sizeof(uint8_t));
   }
 
   packet_intense = (uint8_t *)calloc(MAX_PACKETS, sizeof(uint8_t));
@@ -70,6 +70,10 @@ Shows::Shows(Led* led_pointer)
   backColorSpeed = color_speed_max / 2;
 
   // wait defaults. If desired, override with setter functions below.
+  has_morphing = true;
+  has_hex_shape = true;
+  has_blur = false;
+
   wait_min = 4;  // setWaitRange(uint8_t min, uint8_t max, uint8_t values)
   wait_max = 50;
   num_wait_values = 10;
@@ -87,7 +91,11 @@ Shows::Shows(Led* led_pointer)
 void Shows::morphFrame(void)
 {
   // wrapper for led.morph_frame(). Handles the 2 parameters
-  led->morph_frame(morph, getNumFrames());
+  if (has_morphing) {
+    led->morph_frame(morph, getNumFrames());
+  } else {
+    led->morph_frame(getNumFrames(), getNumFrames());
+  }
 }
 
 void Shows::setForeColor(uint8_t c)
@@ -150,6 +158,11 @@ void Shows::setPixeltoBlack(uint8_t i)
   led->setPixelBlack(i);
 }
 
+void Shows::setPixeltoColor(uint8_t i, CHSV color)
+{
+  led->setPixelColor(i, color);
+}
+
 void Shows::fillForeColor()
 {
   led->fillHue(foreColor);
@@ -158,6 +171,11 @@ void Shows::fillForeColor()
 void Shows::fillBackColor()
 {
   led->fillHue(backColor);
+}
+
+void Shows::fillBlack()
+{
+  led->fillBlack();
 }
 
 void Shows::resetMorph(void)
@@ -229,7 +247,8 @@ void Shows::advanceClock(void)
 {
   // Handles advancement of both the "minute" morph hand and "hour" cycle hand
   morph++;
-  if (morph >= getNumFrames()) { // Finished morphing
+
+  if (has_morphing == false || morph >= getNumFrames()) { // Finished morphing
     morph = 0;
     cycle++;
     led->push_frame();
@@ -248,6 +267,22 @@ void Shows::resetAllClocks(void)
    morph = 0;
    cycle = 0;
    smallCycle = 0;
+}
+
+void Shows::turnOffMorphing(void)
+{
+  has_morphing = false;
+}
+
+void Shows::turnOnMorphing(void)
+{
+  has_morphing = true;
+}
+
+void Shows::setAsSquare(void)
+{
+  has_hex_shape = false;
+  led->setAsSquare();
 }
 
 void Shows::pickRandomColorSpeeds(void)
@@ -280,12 +315,12 @@ void Shows::shuffleLeds(void)
 
   uint8_t i, j, save;
 
-  for (i=0; i < SHUFFLE_SIZE; i++) {
+  for (i=0; i < numLeds; i++) {
     shuffle[i] = i; // before shuffle
   }
 
-  for (i=0; i < SHUFFLE_SIZE; i++) { // here's position
-    j = random8(SHUFFLE_SIZE);         // there's position
+  for (i=0; i < numLeds; i++) { // here's position
+    j = random8(numLeds);         // there's position
     save = shuffle[i];
     shuffle[i] = shuffle[j];       // first swap
     shuffle[j] = save;             // second swap
@@ -296,7 +331,7 @@ void Shows::shuffleColors(void)
 {
   if (!USE_SHUFFLE) { return; }
 
-  for (uint8_t i=0; i < SHUFFLE_SIZE; i++) {
+  for (uint8_t i=0; i < numLeds; i++) {
     shuffle[i] = random(MAX_COLOR);
   }
 }
@@ -342,6 +377,11 @@ void Shows::makeWaitFaster(uint8_t r)
   wait /= r;
 }
 
+void Shows::makeWaitSlower(uint8_t r)
+{
+  wait = min(num_wait_values-1, (wait * r));
+}
+
 void Shows::tweakWait(void)
 {
   wait = up_or_down(wait, 0, num_wait_values);
@@ -374,20 +414,18 @@ void Shows::randomFill(void)
 {
   if (!USE_SHUFFLE) { return; }
 
-  uint8_t i, j, save, pos;
-
-  pos = cycle % (SHUFFLE_SIZE * 2);  // Where we are in the show
+  uint8_t pos = cycle % (numLeds * 2);  // Where we are in the show
 
   if (pos == 0 && morph == 0) {  // Start of show
     shuffleLeds();
     led->fillBlack();
   }
 
-  if (pos > SHUFFLE_SIZE) {
-    pos = (2 * SHUFFLE_SIZE) - pos;
+  if (pos > numLeds) {
+    pos = (2 * numLeds) - pos;
   }
 
-  for (i=0; i < SHUFFLE_SIZE; i++) {
+  for (uint8_t i=0; i < numLeds; i++) {
     if (i < pos) {
       led->setPixelHue(shuffle[i], foreColor + i);  // Turning on lights one at a time
     } else {
@@ -403,7 +441,7 @@ void Shows::randomColors(void)
   if (isShowStart()) {  // Start of show: assign lights to random colors
     shuffleColors();
   }
-  for (uint8_t i=0; i < SHUFFLE_SIZE; i++) {
+  for (uint8_t i=0; i < numLeds; i++) {
     led->setPixelHue(i, shuffle[i] + cycle);
   }
 }
@@ -468,7 +506,7 @@ void Shows::sawTooth(void)
 {
   uint8_t intense;
   for (uint8_t i=0; i < numLeds; i++) {
-    intense = sin8_C((i+cycle) * foreColorSpeed * 0.5);
+    intense = sin8_C((i + cycle) * foreColorSpeed * 0.5);
     // "i" will have pattern move up; "numLeds-i-1'' will have pattern move down
     led->setPixelColor(numLeds-i-1, led->gradient_wheel(foreColor+i, intense));
   }
@@ -476,36 +514,64 @@ void Shows::sawTooth(void)
 
 void Shows::lightWave(void)
 {
-  for (uint8_t i=0; i < numLeds; i++) {
-     if ((i + cycle) % 10 == 0) {
-       led->setPixelHue(i, foreColor);
-     } else {
-       led->setPixelBlack(i);
-     }
+  if (!has_blur) {
+    lightWave_blur(cycle, 10);
+  } else {
+    lightWave_blur(cycle + 0, 10);
+    led->setBlur(128);
+    lightWave_blur(cycle - 1, 10);
+    lightWave_blur(cycle + 1, 10);
+    led->turnOffBlur();
   }
 }
 
 void Shows::lightWave(uint8_t spacing)
 {
+  if (!has_blur) {
+    lightWave_blur(cycle, spacing);
+  } else {
+    lightWave_blur(cycle + 0, spacing);
+    led->setBlur(128);
+    lightWave_blur(cycle - 1, spacing);
+    lightWave_blur(cycle + 1, spacing);
+    led->turnOffBlur();
+  }
+}
+
+void Shows::lightWave_blur(uint16_t cyc, uint8_t spacing)
+{
   for (uint8_t i=0; i < numLeds; i++) {
-     if ((i + cycle) % spacing == 0) {
-       led->setPixelHue(i, foreColor);
-     } else {
-       led->setPixelBlack(i);
-     }
+    if ((i + cyc) % spacing == 0) {
+      led->setPixelHue(i, foreColor);
+    } else {
+      led->setPixelBlack(i);
+    }
   }
 }
 
 void Shows::lightRunUp(void)
 {
-  uint8_t pos = cycle % (numLeds*2);  // Where we are in the show
+   if (!has_blur) {
+     lightRunUp_blur(cycle);
+   } else {
+     lightRunUp_blur(cycle + 0);
+     led->setBlur(128);
+     lightRunUp_blur(cycle - 1);
+     lightRunUp_blur(cycle + 1);
+     led->turnOffBlur();
+   }
+}
+
+void Shows::lightRunUp_blur(uint16_t cyc)
+{
+  uint8_t pos = cyc % (numLeds*2);  // Where we are in the show
   if (pos >= numLeds) {
-    pos = (numLeds*2) - pos;
+    pos = (numLeds * 2) - pos;
   }
 
   for (uint8_t i=0; i < numLeds; i++) {
     if (i < pos) {
-      led->setPixelHue(i, foreColor + (i * (foreColorSpeed/5)));  // Turning on lights one at a time
+      led->setPixelHue(i, foreColor + (i * (foreColorSpeed / 5)));  // Turning on lights one at a time
     } else {
       led->setPixelBlack(i);
     }
@@ -519,6 +585,7 @@ void Shows::bands(void)
     bands_bpm_2 = random(bands_min_bpm, bands_max_bpm);
     band_min_1 = random(64, 192);
     band_min_2 = random(64, 192);
+    turnOffMorphing();
   }
 
   led->fillBlack();
@@ -547,7 +614,9 @@ void Shows::packets(void)
   if (isShowStart()) {
     for (uint8_t i=0; i < MAX_PACKETS; i++) {
       packet_intense[i] = 0;  // Reset all packets
+      packet_freq[i] = random(1,4);
     }
+    turnOffMorphing();
   }
 
   led->fillBlack();
@@ -561,12 +630,12 @@ void Shows::packets(void)
       // New packet
       packet_intense[i] = 1;
       packet_freq[i] = random(1,4);
-      packet_color[i] = random8(255);
+      packet_color[i] += random8(10,40);
 
     } else if (packet_intense[i] % 2 == 1) {
       // Increasing
-      if (packet_intense[i] + (packet_freq[i] * 2) > 255) {
-        packet_intense[i] = 254;  // Switch to decreasing
+      if (packet_intense[i] + (packet_freq[i] * 2) > 253) {
+        packet_intense[i] = 252;  // Switch to decreasing
       } else {
         packet_intense[i] += (packet_freq[i] * 2);  // Going up
       }
@@ -582,7 +651,6 @@ void Shows::packets(void)
 
     // Apply each packet to the lights
     for (uint8_t j=0; j < numLeds; j++) {
-      // beatsin8(bpm, low, high, uint32_t timebase, uint8_t phase_offset );
       wave = beatsin8(10, 0, packet_intense[i], 0, map(j, 0, numLeds, cycle, 128 * packet_freq[i]) );
       led->addPixelColor(j, CHSV(packet_color[i], 255, wave) );
     }
@@ -594,10 +662,11 @@ void Shows::packets_two(void)
 {
   if (isShowStart()) {
     for (uint8_t i=0; i < MAX_PACKETS; i++) {
-      packet_freq[i] = random(20);
+      packet_freq[i] = random(15,40);
       packet_color[i] = random8(255);
       packet_intense[i] = random(150, 220);
     }
+    turnOffMorphing();
   }
 
   led->fillBlack();
@@ -608,20 +677,15 @@ void Shows::packets_two(void)
 
     if (random(0, 256) == 1) {
       // Reset packet
-      packet_freq[i] = random(20);
-      packet_color[i] = random8(255);
-      packet_intense[i] = random(256);
+      packet_color[i] += random8(20,50);
+      packet_intense[i] = random(20,255);
     }
 
     // Apply each packet to the lights
     for (uint8_t j=0; j < numLeds; j++) {
-      // beatsin8(bpm, low, high, uint32_t timebase, uint8_t phase_offset );
-      wave = beatsin8(packet_freq[i], 0, 255, 0, map(j, 0, numLeds, cycle, 128 * packet_freq[i]) );
-      if (wave >= packet_intense[i]) {
-        wave = map(wave, packet_intense[i], 255, 0, 255);
-        pixel =  (packet_freq[i] % 2) ? j : numLeds-j-1;
-        led->addPixelColor(pixel, CHSV(packet_color[i], 255, wave) );
-      }
+      wave = beatsin8(packet_freq[i], 0, 255, 0, map(j, 0, numLeds, cycle, packet_freq[i]) );
+      pixel =  (packet_freq[i] % 2) ? j : numLeds-j-1;
+      led->addPixelColor(pixel, CHSV(packet_color[i], 255, wave) );
     }
   }
   led->push_frame();  // Prevents unwanted color interpolation
@@ -632,12 +696,13 @@ void Shows::plinko(uint8_t start_pos)
   if (!HAS_2D_SHOWS) { return; }  // Can't run show with HAS_2D_SHOWS = false
 
   uint8_t i, num_choices;
-  int8_t pos, new_pos;
+  uint8_t pos, new_pos;
+  uint8_t dir_choices[4] = { 2, 3, 4, XX };
 
   // Refresh plinkos at the start of the show
   if (isShowStart()) {
     for (i = 0; i < MAX_PLINKO; i++) {
-      plink[i] = -1;  // Move plinkos off the board
+      plink[i] = XX;  // Move plinkos off the board
     }
     num_plinko = random(1, MAX_PLINKO);
     wait /= 2;  // make a lot faster
@@ -648,23 +713,34 @@ void Shows::plinko(uint8_t start_pos)
   }
 
   // Move plinko
-  int8_t choices[2] = { -1, -1 };
+  uint8_t choices[3] = { XX, XX, XX };  // For 2 and 3 directional plinko
+
+  if (!has_hex_shape) {
+    dir_choices[0] = 0;
+    dir_choices[1] = 1;
+    dir_choices[2] = 3;
+  }
 
   for (i = 0; i < num_plinko; i++) {
     pos = plink[i];
 
-    if (pos != -1) {  // is on the board?
+    if (pos != XX) {  // is on the board?
       num_choices = 0;  // yes, on board. Itemize valid next positions.
-      for (uint8_t dir = 2; dir < 4; dir++) {
+
+      for (uint8_t dir_choice = 0; dir_choice < 4; dir_choice++) {
+        uint8_t dir = dir_choices[dir_choice];
+        if (dir == XX) {
+          continue;
+        }
         new_pos = led->getNeighbor(pos, dir);
-        if (new_pos != -1) {
+        if (new_pos != XX) {
           choices[num_choices] = new_pos;
           num_choices++;
         }
       }
 
-      if (num_choices == 0) {
-        plink[i] = -1;  // nowhere to go; put off board
+      if (num_choices <= 1) {
+        plink[i] = XX;  // nowhere to go; put off board
       } else {
         plink[i] = choices[random(num_choices)];
       }
@@ -688,7 +764,7 @@ void Shows::bounce(void)
   if (!HAS_2D_SHOWS) { return; }  // Can't run show with HAS_2D_SHOWS = false
 
   const uint8_t trail_colors[] = { 205, 145, 85, 45, 5 };
-  int8_t curr_pos;
+  uint8_t curr_pos;
 
   if (isShowStart()) {
     num_balls = random(1, MAX_BALLS);
@@ -705,18 +781,26 @@ void Shows::bounce(void)
   for (uint8_t n = 0; n < num_balls; n++) {
     for (uint8_t i = 0; i < TRAIL_SIZE; i++) {
       curr_pos = getTrail(n,i);
-      if (curr_pos == -1) {
+
+      if (curr_pos == XX) {
         continue;
       }
       led->addPixelColorNoMap(curr_pos, led->rgb_to_hsv(CRGB(0, 0, trail_colors[i])));
     }
-    if (bounce_pos[n] != -1) {
+    if (bounce_pos[n] != XX) {
       led->addPixelColorNoMap(bounce_pos[n], led->rgb_to_hsv(CRGB(200, 0, 128)));
     }
 
     uint8_t old_dir = bounce_dir[n];
-    while (led->getNeighbor(bounce_pos[n], bounce_dir[n]) == -1 || (bounce_dir[n] + 3) % 6 == old_dir) {
-      bounce_dir[n] = random(0,6);
+
+    if (has_hex_shape) {
+      while (led->getNeighbor(bounce_pos[n], bounce_dir[n]) == XX || (bounce_dir[n] + 3) % 6 == old_dir) {
+        bounce_dir[n] = random(0,6);  // HexGrid
+      }
+    } else {
+      while (led->getNeighbor(bounce_pos[n], bounce_dir[n]) == XX || (bounce_dir[n] + 2) % 4 == old_dir || random(0,5) == 0) {
+        bounce_dir[n] = random(0,6);  // SquareGrid
+      }
     }
     for (int i = TRAIL_SIZE - 1; i >= 0; i--) {
       setTrail(n, i, getTrail(n, i - 1) );
@@ -745,25 +829,32 @@ void Shows::bounceGlowing(void)
   led->fill(led->rgb_to_hsv(CRGB(0, 40, 40)));  // changed g,b=2 to g,b=40
 
   for (int n = 0; n < num_balls; n++) {
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 4; i++) {
       int x = led->getNeighbor(bounce_pos[n], i);
-      if (x == -1) continue;
-      for (int j = 0; j < 6; j++) {
+      if (x == XX) continue;
+      for (int j = 0; j < 4; j++) {
         int xx = led->getNeighbor(x, j);
-        if (xx == -1) continue;
+        if (xx == XX) continue;
         led->addPixelColorNoMap(xx, led->rgb_to_hsv(CRGB(0, glow_colors[2], glow_colors[2])));
       }
     }
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 4; i++) {
       int x = led->getNeighbor(bounce_pos[n], i);
-      if (x == -1) continue;
+      if (x == XX) continue;
       led->addPixelColorNoMap(x, led->rgb_to_hsv(CRGB(0, glow_colors[1], glow_colors[1])));
     }
     led->addPixelColorNoMap(bounce_pos[n], led->rgb_to_hsv(CRGB(0, glow_colors[0], glow_colors[0])));
 
     int old_dir = bounce_dir[n];
-    while (led->getNeighbor(bounce_pos[n], bounce_dir[n]) == -1 || (bounce_dir[n] + 3) % 6 == old_dir) {
-      bounce_dir[n] = random(0,6);
+
+    if (has_hex_shape) {
+      while (led->getNeighbor(bounce_pos[n], bounce_dir[n]) == XX || (bounce_dir[n] + 3) % 6 == old_dir) {
+        bounce_dir[n] = random(0,6);  // HexGrid
+      }
+    } else {
+      while (led->getNeighbor(bounce_pos[n], bounce_dir[n]) == XX || (bounce_dir[n] + 2) % 4 == old_dir || random(0,6) == 0) {
+        bounce_dir[n] = random(0,6);  // SquareGrid
+      }
     }
     bounce_pos[n] = led->getNeighbor(bounce_pos[n], bounce_dir[n]);
   }
@@ -775,20 +866,20 @@ void Shows::bounceGlowing(void)
 //
 void Shows::clearTrails(void)
 {
-  // clear out all the ball trails (set to -1)
+  // clear out all the ball trails (set to XX)
   for (uint8_t x = 0; x < MAX_BALLS; x++) {
     for (uint8_t y = 0; y < TRAIL_SIZE; y++) {
-      setTrail(x, y, -1);
+      setTrail(x, y, XX);
     }
   }
 }
 
-int8_t Shows::getTrail(uint8_t trail_num, uint8_t dist)
+uint8_t Shows::getTrail(uint8_t trail_num, uint8_t dist)
 {
   return trail[(trail_num * TRAIL_SIZE) + dist];
 }
 
-void Shows::setTrail(uint8_t trail_num, uint8_t dist, int8_t value)
+void Shows::setTrail(uint8_t trail_num, uint8_t dist, uint8_t value)
 {
   trail[(trail_num * TRAIL_SIZE) + dist] = value;
 }

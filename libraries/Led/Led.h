@@ -17,24 +17,28 @@ class Led
       fillHue(uint8_t hue),
       fillBlack(void);
     void
-      setPixelColor(int8_t i, CHSV color), setPixelColorNoMap(int8_t i, CHSV color),
-      setPixelHue(int8_t i, uint8_t hue), setPixelHueNoMap(int8_t i, uint8_t hue),
-      setPixelBlack(int8_t i), setPixelBlackNoMap(int8_t i);
+      setPixelColor(uint8_t i, CHSV color), setPixelColorNoMap(uint8_t i, CHSV color),
+      setPixelHue(uint8_t i, uint8_t hue), setPixelHueNoMap(uint8_t i, uint8_t hue),
+      setPixelBlack(uint8_t i), setPixelBlackNoMap(uint8_t i);
     void
-      dimPixel(int8_t i, uint8_t amount),
+      dimPixel(uint8_t i, uint8_t amount),
       dimAllPixels(uint8_t amount);
     void
-      setLedMap(int8_t *led_map_pointer),
-      setCoordMap(uint8_t width, int8_t *coord_pointer),
-      setNeighborMap(int8_t *neighbor_map);
-    int8_t
+      setLedMap(uint8_t *led_map_pointer),
+      setCoordMap(uint8_t width, uint8_t *coord_pointer),
+      setNeighborMap(uint8_t *neighbor_map);
+    uint8_t
       lookupLed(uint8_t i),
       getLedFromCoord(uint8_t x, uint8_t y),
-      getNeighbor(int8_t pos, uint8_t dir);
+      getNeighbor(uint8_t pos, uint8_t dir);
     void morph_frame(uint8_t morph, uint8_t total_frames);
     void push_frame(void);
     void
-      addPixelColor(int8_t i, CHSV c2), addPixelColorNoMap(int8_t i, CHSV c2);
+      setBlur(uint8_t b), turnOffBlur(void);
+    bool
+      hasBlur(void);
+    void
+      addPixelColor(uint8_t i, CHSV c2), addPixelColorNoMap(uint8_t i, CHSV c2);
     CHSV
       getCurrFrameColor(uint8_t i),
       getNextFrameColor(uint8_t i),
@@ -67,6 +71,8 @@ class Led
       setOnlyRed(void);  // Use only purple-red-yellow colors
     void
       turnPalettesOn(void), turnPalettesOff(void);
+    void
+      setAsSquare(void);
     void randomizePalette(void);
     CHSV constrain_palette(CHSV color);
 
@@ -86,11 +92,13 @@ class Led
     uint8_t
       _palette_start, _palette_width;
 
-    int8_t
+    uint8_t
       *led_map, *coords, *neighbors;
 
+    uint8_t blur_amount;
+
     bool
-      is_mapped, is_2d_mapped, is_neighbor_mapped;  // Are the LEDs explicitly mapped?
+      is_mapped, is_2d_mapped, is_neighbor_mapped, has_hex_shape;  // Are the LEDs explicitly mapped?
 
     // private functions
 

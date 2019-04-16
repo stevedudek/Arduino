@@ -18,6 +18,8 @@ class Shows
       packets_two(void), plinko(uint8_t start_pos),
       sinelon_fastled(void), bpm_fastled(void), juggle_fastled(void);
     void
+      lightRunUp_blur(uint16_t cyc), lightWave_blur(uint16_t cyc, uint8_t spacing);
+    void
       shuffleLeds(void), shuffleColors(void);
     void
       setForeColor(uint8_t c), setBackColor(uint8_t c),
@@ -25,7 +27,8 @@ class Shows
       IncForeColor(uint8_t amount), IncBackColor(uint8_t amount),
       setPixeltoForeColor(uint8_t i), setPixeltoBackColor(uint8_t i),
       setPixeltoHue(uint8_t i, uint8_t h), setPixeltoBlack(uint8_t i),
-      fillForeColor(void), fillBackColor(void),
+      setPixeltoColor(uint8_t i, CHSV color),
+      fillForeColor(void), fillBackColor(void), fillBlack(void),
       morphFrame(void),
       advanceClock(void),
       resetAllClocks(void),
@@ -40,7 +43,10 @@ class Shows
       setCycle(uint16_t c), setSmallCycle(uint32_t c),
       setWait(uint8_t w),
       setWaitRange(uint8_t wait_min, uint8_t wait_max, uint8_t num_wait_values),
-      makeWaitFaster(uint8_t r);
+      makeWaitSlower(uint8_t r), makeWaitFaster(uint8_t r),
+      setAsSquare(void);
+    void
+      turnOffMorphing(void), turnOnMorphing(void);
     uint8_t
       getForeColor(void), getBackColor(void),
       getForeColorSpeed(void), getBackColorSpeed(void);
@@ -75,6 +81,8 @@ class Shows
     uint32_t smallCycle;
     uint8_t wait;
 
+    bool has_morphing, has_hex_shape, has_blur;
+
     uint8_t color_speed_min, color_speed_max;
     uint8_t bands_min_bpm, bands_max_bpm;
     uint8_t bands_bpm_1, bands_bpm_2;
@@ -83,15 +91,15 @@ class Shows
 
     uint8_t *shuffle;
 
-    int8_t *plink, *trail;
+    uint8_t *plink, *trail;
     uint8_t *bounce_dir, *bounce_pos;
     uint8_t num_plinko, num_balls;
     uint8_t *packet_intense, *packet_freq, *packet_color;
 
     // private functions
     void clearTrails(void);
-    int8_t getTrail(uint8_t trail_num, uint8_t dist);
-    void setTrail(uint8_t trail_num, uint8_t dist, int8_t value);
+    uint8_t getTrail(uint8_t trail_num, uint8_t dist);
+    void setTrail(uint8_t trail_num, uint8_t dist, uint8_t value);
 };
 
 #endif

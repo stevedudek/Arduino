@@ -6,6 +6,7 @@
 #include "Led.h"  // include this library's description file
 
 #define BLACK  CHSV(0, 0, 0)
+#define XX  255
 
 //
 // Constructor
@@ -24,6 +25,10 @@ Led::Led(uint8_t i)
   is_mapped = false;
   is_2d_mapped = false;
   is_neighbor_mapped = false;
+
+  turnOffBlur();
+
+  has_hex_shape = true;
 }
 
 //
@@ -55,47 +60,55 @@ void Led::fillBlack(void)
   }
 }
 
-void Led::setPixelColor(int8_t i, CHSV color)
+void Led::setPixelColor(uint8_t i, CHSV color)
 {
-  if (i != -1) {
-    next_frame[lookupLed(i)] = color;
+  if (i != XX) {
+    if (hasBlur() && !is_black(color)) {
+      next_frame[lookupLed(i)] = getInterpHSV(next_frame[lookupLed(i)], color, blur_amount);
+    } else {
+      next_frame[lookupLed(i)] = color;
+    }
   }
 }
 
-void Led::setPixelHue(int8_t i, uint8_t hue)
+void Led::setPixelHue(uint8_t i, uint8_t hue)
 {
   if (is_only_red) {
-    hue = map8(hue, 192, 64);
+    hue = map8(hue, 224, 32);
   }
   setPixelColor(i, wheel(hue));
 }
 
-void Led::setPixelBlack(int8_t i)
+void Led::setPixelBlack(uint8_t i)
 {
   setPixelColor(i, BLACK);
 }
 
-void Led::setPixelColorNoMap(int8_t i, CHSV color)
+void Led::setPixelColorNoMap(uint8_t i, CHSV color)
 {
-  if (i != -1) {
-    next_frame[i] = color;
+  if (i != XX) {
+    if (hasBlur() && !is_black(color)) {
+      next_frame[i] = getInterpHSV(next_frame[i], color, blur_amount);
+    } else {
+      next_frame[i] = color;
+    }
   }
 }
 
-void Led::setPixelHueNoMap(int8_t i, uint8_t hue)
+void Led::setPixelHueNoMap(uint8_t i, uint8_t hue)
 {
   setPixelColorNoMap(i, wheel(hue));
 }
 
-void Led::setPixelBlackNoMap(int8_t i)
+void Led::setPixelBlackNoMap(uint8_t i)
 {
   setPixelColorNoMap(i, BLACK);
 }
 
-void Led::dimPixel(int8_t i, uint8_t amount)
+void Led::dimPixel(uint8_t i, uint8_t amount)
 {
-  if (i != -1) {
-    next_frame[lookupLed(i)].v = scale8(next_frame[lookupLed(i)].v, 255 - amount);  // ToDo: Check this
+  if (i != XX) {
+    next_frame[lookupLed(i)].v = scale8(next_frame[lookupLed(i)].v, 255 - amount);
   }
 }
 
@@ -123,10 +136,25 @@ void Led::push_frame(void)
   }
 }
 
-void Led::addPixelColor(int8_t i, CHSV c2)
+void Led::turnOffBlur(void)
+{
+  blur_amount = 0;
+}
+
+void Led::setBlur(uint8_t b)
+{
+  blur_amount = b;
+}
+
+bool Led::hasBlur(void)
+{
+  return (blur_amount != 0);
+}
+
+void Led::addPixelColor(uint8_t i, CHSV c2)
 {
   // Pick the dominant color (c1 vs. c2) by value, instead of morphing them
-  if (i != -1) {
+  if (i != XX) {
     CHSV c1 = next_frame[lookupLed(i)];
 
     if (c1.v > c2.v) {
@@ -137,10 +165,10 @@ void Led::addPixelColor(int8_t i, CHSV c2)
   }
 }
 
-void Led::addPixelColorNoMap(int8_t i, CHSV c2)
+void Led::addPixelColorNoMap(uint8_t i, CHSV c2)
 {
   // Pick the dominant color (c1 vs. c2) by value, instead of morphing them
-  if (i != -1) {
+  if (i != XX) {
     CHSV c1 = next_frame[i];
 
     if (c1.v > c2.v) {
@@ -213,7 +241,7 @@ CHSV Led::wheel(uint8_t hue)
 
 CHSV Led::gradient_wheel(uint8_t hue, uint8_t intensity)
 {
-  return CHSV(hue, 255, intensity);
+  return CHSV(hue, 255, intensity);  // middle = saturation
 }
 
 CHSV Led::rgb_to_hsv( CRGB rgb)
@@ -309,6 +337,11 @@ void Led::RGBtoHSV(uint8_t red, uint8_t green, uint8_t blue, float *h, float *s,
 }
 */
 
+void Led::setAsSquare(void)
+{
+  has_hex_shape = false;
+}
+
 void Led::setOnlyRed(void)
 {
   is_only_red = true;
@@ -379,6 +412,7 @@ CHSV Led::getInterpHSV(CHSV c1, CHSV c2, uint8_t fract)
 
 CRGB Led::getInterpRGB(CRGB c1, CRGB c2, uint8_t fract)
 {
+  fract = ease8InOutQuad(fract);
   // Simple CRGB interpolation
   return CRGB(interpolate(c1.r, c2.r, fract),
               interpolate(c1.g, c2.g, fract),
@@ -418,7 +452,7 @@ uint8_t Led::interpolate_wrap(uint8_t a, uint8_t b, uint8_t fract)
   return answer;
 }
 
-void Led::setLedMap(int8_t *led_map_pointer)
+void Led::setLedMap(uint8_t *led_map_pointer)
 {
   // led_map should be stored on the client as:
   //   const uint8_t LedMap[] PROGMEM = {
@@ -427,31 +461,31 @@ void Led::setLedMap(int8_t *led_map_pointer)
   is_mapped = true;
 }
 
-void Led::setCoordMap(uint8_t width, int8_t *coord_pointer)
+void Led::setCoordMap(uint8_t width, uint8_t *coord_pointer)
 {
   // coord_map should be stored on the client as:
-  //   const int8_t coords[] PROGMEM = {
-  //     -1,-1, 1, 0,-1,-1,-1,  // etc.
+  //   const uint8_t coords[] PROGMEM = {
+  //     XX,XX, 1, 0,XX,XX,XX,  // etc.
   // 1D array of 2D data. -1 = no LED
   coords = coord_pointer;
   width_2d = width;
   is_2d_mapped = true;
 }
 
-void Led::setNeighborMap(int8_t *neighbor_map)
+void Led::setNeighborMap(uint8_t *neighbor_map)
 {
   // neighbor_map should be stored on the client as:
-  //   const int8_t neighbors[] PROGMEM = {
-  //      -1,6,7,-1,-1,-1, // 0
-  //      -1,6,7,-1,-1,-1, // 1  etc.
+  //   const uint8_t neighbors[] PROGMEM = {
+  //      XX,6,7,XX,XX,XX, // 0
+  //      XX,6,7,XX,XX,XX, // 1  etc.
   // one row of 6 values per hexagonal pixel:
   //      ul, ur, r, lr, ll, l (u = upper, l = lower, r = right, l = left)
-  //      -1 = no neighbor
+  //      XX = no neighbor
   neighbors = neighbor_map;
   is_neighbor_mapped = true;
 }
 
-int8_t Led::lookupLed(uint8_t i)
+uint8_t Led::lookupLed(uint8_t i)
 {
   if (is_mapped) {
     return pgm_read_byte_near(led_map + i);
@@ -460,16 +494,17 @@ int8_t Led::lookupLed(uint8_t i)
   }
 }
 
-int8_t Led::getNeighbor(int8_t pos, uint8_t dir)
+uint8_t Led::getNeighbor(uint8_t pos, uint8_t dir)
 {
-  if (is_neighbor_mapped && pos != -1) {
-    return pgm_read_byte_near(neighbors + (pos * 6) + (dir % 6));  // Use neighbor map if specified
+  if (is_neighbor_mapped && pos != XX) {
+    uint8_t num_neighbors = (has_hex_shape) ? 6 : 4;  // HexGrid = 6, SquareGrid = 4
+    return pgm_read_byte_near(neighbors + (pos * num_neighbors) + (dir % num_neighbors));
   } else {
     return pos;  // Dummy default will show strange behaviour
   }
 }
 
-int8_t Led::getLedFromCoord(uint8_t x, uint8_t y)
+uint8_t Led::getLedFromCoord(uint8_t x, uint8_t y)
 {
   if (is_2d_mapped) {
     return pgm_read_byte_near(coords + (x * width_2d) + (y % width_2d));
