@@ -46,7 +46,7 @@ CRGB strip[numLights];
 
 // For Fixed Brightness Control
 
-#define MAX_DIM 0.95
+#define MAX_DIM 0.5
 #define MIN_DIM 0.0
 
 // Wiring lay-out for the lights

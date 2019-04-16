@@ -1,4 +1,4 @@
-#include <SPI.h>
+
 #include <Adafruit_DotStar.h>
 
 //
@@ -38,8 +38,8 @@ int foreColor =   0;    // Starting foreground color
 int backColor = 500;    // Starting background color
 #define MaxColor 1536    // Colors are 6 * 255
 
-float BRIGHTNESS = 0.5;  // 0.0 - 1.0 brightness level
-float ONLY_RED = false; // Set true for only Reds
+float BRIGHTNESS = 0.20;  // 0.0 - 1.0 brightness level
+boolean ONLY_RED = true; // Set true for only Reds
 
 // Shows
 

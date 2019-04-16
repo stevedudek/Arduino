@@ -449,6 +449,8 @@ void lightwaves_show(int cycles) {
 void patterns(int cycles) {
   int pattern = random(0, NUM_PATTERNS);    // Pick a random pattern
   int i, ticks = 0;                         // One color is always green
+
+  CRGB color = CRGB::Blue;
   
   while (ticks++ < cycles) {
       if (!random(10)) {       // The not-green color

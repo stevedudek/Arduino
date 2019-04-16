@@ -1,0 +1,389 @@
+#include <Noise.h>
+#include <FastLED.h>
+#include <Led.h>
+#include <Shows.h>
+
+//
+//  Snowflakes
+//
+//  9/17/2018
+//
+
+#define SPOKE_LENGTH 12  // Small = 8, Medium = 10, Large = 12
+
+#define SPOKE_LEDS  (SPOKE_LENGTH * 6)  // Don't change
+#define NUM_LEDS  (SPOKE_LEDS + 7)  // Don't change
+
+#define BRIGHTNESS  255 // (0-255)
+
+#define DELAY_TIME 30 // in milliseconds
+
+#define DATA_PIN 9
+#define CLOCK_PIN 8
+
+Led led = Led(NUM_LEDS);  // Class instantiation of the Led library
+CRGB leds[NUM_LEDS];  // Hook for FastLED library
+Shows shows = Shows(&led);  // Show library
+
+#define CAN_CHANGE_PALETTES true  // Palettes
+
+// Shows
+#define NUM_SHOWS 11
+#define SINGLE_SPOKE_SHOWS 3  // Shows here and above can have a single spoke
+uint8_t current_show = 2;
+uint8_t current_pattern = 0;
+boolean has_black_pattern = true;
+
+// Clocks and time
+#define SHOW_DURATION 30  // seconds
+uint16_t MAX_SMALL_CYCLE = SHOW_DURATION * (1000 / DELAY_TIME);
+#define FADE_OUT_TIME 1   // seconds to fade out
+#define FADE_IN_TIME 1    // seconds to fade out
+
+// noise
+#define HAVE_NOISE false    // set to false to suppress noise
+Noise noise = Noise(NUM_LEDS);
+
+// symmetries - 6 arms
+#define NUM_SYMMETRIES 5
+uint8_t symmetry = 0;  // 0-4
+boolean invert = false;  // Whether to invert odd arms
+#define NEVER_ROTATE true  // True prevents rotation
+boolean is_rotating = true;  // Whether arms are currently rotating
+const uint8_t symmetries[] = { 1, 2, 3, 6, 6 };
+const uint8_t hub_pixels[] = { 7, 4, 3, 2, 2 };  // 1 + (6 / symmetries[n]);
+
+//
+// PATTERNS
+//
+
+// For largest Snowflake (SPOKE_LENGTH = 12)
+#define NUM_PATTERNS 5   // Total number of patterns
+const uint8_t pattern_matrix[] PROGMEM = {
+  //                     Top
+  0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0,
+  1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 0,
+  0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0,
+  1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0,
+  1, 1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0,
+};
+
+/*
+// For smallest Snowflake (SPOKE_LENGTH = 8)
+#define NUM_PATTERNS 6   // Total number of patterns
+const uint8_t pattern_matrix[] PROGMEM = {
+  //               Top
+  0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0,
+  1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0,
+  0, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0,
+  1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0,
+  1, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0,
+  1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0,
+};
+*/
+
+//
+// Setup
+//
+void setup() {
+
+  delay( 3000 ); // power-up safety delay
+
+  randomSeed(analogRead(0));
+  
+  Serial.begin(9600);
+  Serial.println("Start");
+
+  FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);
+  FastLED.setBrightness( BRIGHTNESS );
+  
+  if (HAVE_NOISE) {
+    noise.turnNoiseOn();
+  } else {
+    noise.turnNoiseOff();
+  }
+
+  if (CAN_CHANGE_PALETTES) {
+    led.setPalette();  // turns on palettes with default valets
+  }
+
+  // Set up the various mappings here (1D lists in PROGMEM)
+  //  led.setLedMap(ConeLookUp);  // mapping of pixels to actual leds
+  shows = Shows(&led);  // Show library - reinitialized for led mappings
+  
+  led.fillBlack();
+  led.push_frame();
+
+  set_symmetry();
+
+  shows.setColorSpeedMinMax(2, 10); // Speed up color changing
+}
+
+void loop() {
+  
+  switch (current_show) {
+  
+    case 0:
+      patternsBW();
+      break;
+    case 1:
+      shows.randomColors();
+      break;
+    case 2:
+      shows.randomFill();
+      break;
+    case 3:
+      shows.twoColor();
+      break;
+    case 4:
+      shows.morphChain();
+      break;
+    case 5:
+      shows.lightWave(shows.getForeColorSpeed());
+      break;
+    case 6:
+      shows.sawTooth();
+      break;
+    case 7:
+      shows.lightRunUp();
+      break;
+    case 8:
+      shows.packets();
+      break;
+    case 9:
+      shows.packets_two();
+      break;
+    default:
+      shows.bands();
+      break;
+  }
+
+  morph_frame();  // Morph the display and update the LEDs
+
+  delay(DELAY_TIME); // The only delay
+
+  noise.fillNoise();
+  
+  shows.advanceClock();
+  
+  if (shows.getSmallCycle() >= MAX_SMALL_CYCLE) { 
+    next_show(); 
+  }
+}
+
+//
+// next_show
+//
+void next_show() {
+  // Switch between a patterns show and all the other shows
+  current_pattern = random8(NUM_PATTERNS);
+  has_black_pattern = random8(2) ? true : false;
+  is_rotating = (random8(8) == 1) ? true : false;
+  current_show = (current_show == 0) ? random8(2, NUM_SHOWS) : false;
+//  current_show = (current_show + 1) % NUM_SHOWS;  // For debugging
+
+  set_symmetry();
+  led.fillBlack();
+  led.push_frame();
+  shows.resetAllClocks();
+  noise.setRandomNoiseParams();
+  shows.pickRandomColorSpeeds();
+  shows.pickRandomWait();
+  led.randomizePalette();
+//  log_status();  // For debugging
+}
+
+//
+// patterns shows
+//
+void patternsBW() {
+  map_pattern(get_bit_from_pattern_number(0, current_pattern), 0);  // Center
+  map_pattern(get_bit_from_pattern_number(1, current_pattern), 1);  // Start
+  
+  for (int i = 0; i < SPOKE_LENGTH; i++) {
+    map_pattern(get_bit_from_pattern_number(i+2, current_pattern), i + hub_pixels[symmetry]);
+  }
+}
+
+void map_pattern(boolean isOn, uint8_t i) {
+  if (isOn) {  // For pattern table
+    if (has_black_pattern) {
+      shows.setPixeltoHue(i, shows.getForeColor() + i);  // 1 = foreColor
+    } else {
+      shows.setPixeltoForeColor(i);  // 1 = foreColor
+    }
+  } else {
+    if (has_black_pattern) {
+      shows.setPixeltoBlack(i);  // 0 = either Black or backColor
+    } else {
+      shows.setPixeltoBackColor(i);
+    }
+  }
+}
+
+//
+// morph_frame
+//
+void morph_frame() {
+  shows.morphFrame();  // 1. calculate interp_frame 2. adjust palette
+  add_noise();   // Use the noise library
+  update_leds();  // push the interp_frame on to the leds
+  check_fades();  // Fade start and end of shows
+  FastLED.show();  // Update the display 
+}
+
+//
+// add_noise - from library - uses led.library getters and setters
+//
+void add_noise() {
+  if (HAVE_NOISE) {
+    for (uint8_t i = 0; i < NUM_LEDS; i++) {
+      led.setInterpFrameHue(i, noise.addNoiseAtoValue(i, led.getInterpFrameHue(i))); 
+      led.setInterpFrameSat(i, noise.addNoiseBtoValueNoWrap(i, led.getInterpFrameSat(i)));
+    }
+  }
+}
+
+
+//
+// set_symmetry - pick a random symmetry for the duration of the show
+//
+void set_symmetry() {
+  symmetry = random8(NUM_SYMMETRIES); // 0-4
+  if (symmetry == 0 && current_show < SINGLE_SPOKE_SHOWS) {
+    symmetry = random(1, NUM_SYMMETRIES);  // don't allow symmetry 0 (single spoke) for shows < SINGLE_SPOKE_SHOWS
+  }
+  uint8_t numSymLeds = ((6 / symmetries[symmetry]) * SPOKE_LENGTH) + hub_pixels[symmetry];
+  shows.resetNumLeds(numSymLeds);  // resets the virtual number of LEDs
+  invert = random8(2) ? true : false;
+}
+
+//
+// update_leds - push the interp_frame on to the leds - adjust for SYMMETRY!
+//
+void update_leds() {
+  draw_center();
+  draw_hub();
+  draw_spokes();
+}
+
+//
+// draw_center - fill in the center circle - Last pixel maps to virtual led 0
+//
+void draw_center() {
+  leds[NUM_LEDS-1] = led.getInterpFrameColor(0);
+}
+
+//
+// draw_hub - fill in the 6 petals around the center with virtual leds (1+)
+//
+void draw_hub() {
+  uint8_t pixel;
+  uint8_t pitch = 6 / symmetries[symmetry];
+  for (uint8_t i = 0; i < pitch; i++) {
+    for (uint8_t j = 0; j < symmetries[symmetry]; j++) {
+      pixel = try_rotate(SPOKE_LEDS + i + (j * pitch));
+      leds[pixel] = led.getInterpFrameColor(1 + i);
+    }
+  }
+}
+
+//
+// draw_spokes - draw the six spokes
+//
+// spoke virtual leds start at 7
+// actual leds are 0-SPOKE_LEDS
+//
+void draw_spokes() {
+  uint8_t adj_i, pixel, pitch;
+  
+  if (symmetry < 4) {
+    pitch = SPOKE_LEDS / symmetries[symmetry];
+    
+    for (uint8_t i = 0; i < pitch; i++) {      
+      for (uint8_t j = 0; j < symmetries[symmetry]; j++) {
+        adj_i = (invert && j % 2 && symmetry == 3) ? pitch - i : i;
+        pixel = try_rotate(shift_one(adj_i + (j * pitch)));
+        leds[pixel] = led.getInterpFrameColor(hub_pixels[symmetry] + i);
+      }
+    }
+  } else {  // For 12-fold symmetry
+    for (uint8_t i = 0; i < ((SPOKE_LENGTH/2)+1); i++) {
+      for (uint8_t spoke = 0; spoke < 6; spoke++) {
+        leds[shift_one((SPOKE_LENGTH - i) + (spoke * SPOKE_LENGTH))] = led.getInterpFrameColor(hub_pixels[symmetry] + i);
+        leds[shift_one(i + (spoke * SPOKE_LENGTH))] = led.getInterpFrameColor(hub_pixels[symmetry] + i);        
+      }
+    }
+  }
+}
+
+//
+// shift_one - shift the LED one over to fix in software the hardware layout
+//
+uint8_t shift_one(uint8_t i) {
+  return (i + SPOKE_LEDS - 1) % SPOKE_LEDS;
+}
+
+//
+// try_rotate
+//
+uint8_t try_rotate(uint8_t i) {
+  uint8_t new_i = (is_rotating && !NEVER_ROTATE) ? rotate(shows.getCycle() % 6, i) : i;
+  return new_i;
+}
+
+//
+// rotate - rotate a pixel (i) by 0-5 arms (r)
+//
+uint8_t rotate(uint8_t r, uint8_t i) {
+  if (r == 0 || i == (NUM_LEDS-1)) {  // not rotated or center
+    return i;
+  } else if (i >= SPOKE_LEDS) {  // spoke hub
+    return (((i-SPOKE_LEDS) + r) % 6) + SPOKE_LEDS;
+  } else {  // spoke
+    return (i + (r * SPOKE_LENGTH)) % SPOKE_LEDS;
+  }
+}
+
+//
+// check_fades - check the fade-to-blacks at beginning and end of show
+//
+void check_fades() {
+  uint8_t fade_amount = 0;
+  uint32_t small_cycle = shows.getSmallCycle();
+  
+  if (small_cycle <= (FADE_IN_TIME * 1000 / DELAY_TIME)) {
+    fade_amount = map(small_cycle, 0, (FADE_IN_TIME * 1000 / DELAY_TIME), 255, 0);
+  } else if ((MAX_SMALL_CYCLE - small_cycle) <= (FADE_OUT_TIME * 1000 / DELAY_TIME)) {
+    fade_amount = map((MAX_SMALL_CYCLE - small_cycle), 0, (FADE_OUT_TIME * 1000 / DELAY_TIME), 255, 0);
+  }
+  if (fade_amount > 0) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      leds[i].fadeToBlackBy(fade_amount);
+    }
+  }
+}
+
+//
+// Unpack hex into bits
+//
+boolean get_bit_from_pattern_number(uint8_t n, uint8_t pattern_number) {
+  uint8_t pattern_byte = pgm_read_byte_near(pattern_matrix + (pattern_number * (SPOKE_LENGTH + 3)) + n);
+  return (pattern_byte == 1);
+}
+
+//
+// log status
+//
+void log_status() {
+  Serial.print("Show: ");
+  Serial.print(current_show);
+  Serial.print(", Symmetry: ");
+  Serial.print(symmetry);
+  Serial.print(", Invert: ");
+  Serial.print(invert);
+  Serial.print(", Rotate: ");
+  Serial.print(is_rotating);
+  Serial.println(".");
+}
+

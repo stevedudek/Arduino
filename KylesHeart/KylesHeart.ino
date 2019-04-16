@@ -14,7 +14,7 @@
 #define dataPin 9       // 'yellow' wire
 #define clockPin 8      // 'green' wire
 
-#define numLights 12      // number of lights
+#define numLights 1      // number of lights
 
 #define MIN_DELAY  20    // Fastest pulse time
 

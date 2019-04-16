@@ -23,7 +23,7 @@
 #define COLOR 0
 #define BRIGHTNESS 1
 #define YELLOW    20  // Yellow = 20
-#define START_BRIGHT 125  // 256 = Full brightness, 0 = BLACK
+#define START_BRIGHT 255  // 256 = Full brightness, 0 = BLACK
 
 #define FLICKER_CHANCE 1000 // one-in chance to start flicking
 #define BURST_CHANCE 25 // one-in chance a flicker is a burst

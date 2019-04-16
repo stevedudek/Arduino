@@ -26,7 +26,7 @@
 #define dataPin 9       // 'yellow' wire
 #define clockPin 8      // 'green' wire
 
-#define numLights 18     // Tail lights
+#define numLights 50     // Tail lights
 
 
 // framebuffers
@@ -803,6 +803,8 @@ uint32_t HSVinterWheel(int c1, int c2, float fract)
 
 uint32_t HSVinter24(uint32_t c1, uint32_t c2, float fract)
 {
+  if (fract <= 0.0) return c1;
+  if (fract >= 1.0) return c2;
   return(HSVinterRGB(GetRed(c1),GetGreen(c1),GetBlue(c1), GetRed(c2),GetGreen(c2),GetBlue(c2), fract));
 }
 
