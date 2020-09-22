@@ -28,7 +28,7 @@ Led::Led(uint8_t i)
 
   turnOffBlur();
 
-  has_hex_shape = true;
+  num_neighbors = 6;
 }
 
 //
@@ -63,8 +63,13 @@ void Led::fillBlack(void)
 void Led::setPixelColor(uint8_t i, CHSV color)
 {
   if (i != XX) {
-    if (hasBlur() && !is_black(color)) {
-      next_frame[lookupLed(i)] = getInterpHSV(next_frame[lookupLed(i)], color, blur_amount);
+    if (is_only_red) {
+      color.h = map8(color.h, 224, 32);
+    }
+    if (hasBlur()) {
+      if (is_black(color)) return;
+      color.v = scale8(color.v, 255 - blur_amount);
+      addPixelColor(i, color);
     } else {
       next_frame[lookupLed(i)] = color;
     }
@@ -73,9 +78,6 @@ void Led::setPixelColor(uint8_t i, CHSV color)
 
 void Led::setPixelHue(uint8_t i, uint8_t hue)
 {
-  if (is_only_red) {
-    hue = map8(hue, 224, 32);
-  }
   setPixelColor(i, wheel(hue));
 }
 
@@ -87,8 +89,13 @@ void Led::setPixelBlack(uint8_t i)
 void Led::setPixelColorNoMap(uint8_t i, CHSV color)
 {
   if (i != XX) {
-    if (hasBlur() && !is_black(color)) {
-      next_frame[i] = getInterpHSV(next_frame[i], color, blur_amount);
+    if (is_only_red) {
+      color.h = map8(color.h, 224, 32);
+    }
+    if (hasBlur()) {
+      if (is_black(color)) return;
+      color.v = scale8(color.v, 255 - blur_amount);
+      addPixelColorNoMap(i, color);
     } else {
       next_frame[i] = color;
     }
@@ -158,9 +165,9 @@ void Led::addPixelColor(uint8_t i, CHSV c2)
     CHSV c1 = next_frame[lookupLed(i)];
 
     if (c1.v > c2.v) {
-      setPixelColor(i, c1);
+      next_frame[lookupLed(i)] = c1;
     } else {
-      setPixelColor(i, c2);
+      next_frame[lookupLed(i)] = c2;
     }
   }
 }
@@ -172,9 +179,9 @@ void Led::addPixelColorNoMap(uint8_t i, CHSV c2)
     CHSV c1 = next_frame[i];
 
     if (c1.v > c2.v) {
-      setPixelColorNoMap(i, c1);
+      next_frame[i] = c1;
     } else {
-      setPixelColorNoMap(i, c2);
+      next_frame[i] = c2;
     }
   }
 }
@@ -231,7 +238,8 @@ void Led::setInterpFrameVal(uint8_t i, uint8_t val)
 
 bool Led::is_black(CHSV color)
 {
-  return color == BLACK;
+  return color.v == 0;
+//  return color == BLACK;
 }
 
 CHSV Led::wheel(uint8_t hue)
@@ -241,8 +249,9 @@ CHSV Led::wheel(uint8_t hue)
 
 CHSV Led::gradient_wheel(uint8_t hue, uint8_t intensity)
 {
-  return CHSV(hue, 255, intensity);  // middle = saturation
+  return CHSV(hue, 255, dim8_raw(intensity));  // middle = saturation
 }
+
 
 CHSV Led::rgb_to_hsv( CRGB rgb)
 {
@@ -280,6 +289,7 @@ CHSV Led::rgb_to_hsv( CRGB rgb)
     return hsv;
 }
 
+
 /*
 CHSV Led::rgb_to_hsv( CRGB color)
 {
@@ -297,6 +307,7 @@ CHSV Led::rgb_to_hsv( CRGB color)
 
   return CHSV(byte(h * 255 / 360), byte(s * 255), byte(v * 255));
 }
+
 
 void Led::RGBtoHSV(uint8_t red, uint8_t green, uint8_t blue, float *h, float *s, float *v )
 {
@@ -337,9 +348,15 @@ void Led::RGBtoHSV(uint8_t red, uint8_t green, uint8_t blue, float *h, float *s,
 }
 */
 
+
 void Led::setAsSquare(void)
 {
-  has_hex_shape = false;
+  num_neighbors = 4;
+}
+
+void Led::setAsPentagon(void)
+{
+  num_neighbors = 5;
 }
 
 void Led::setOnlyRed(void)
@@ -389,25 +406,61 @@ CHSV Led::constrain_palette(CHSV color)
 CHSV Led::getInterpHSV(CHSV c1, CHSV c2, uint8_t fract)
 {
   // Includes palette adjustment
-  CHSV color;
-
   if (c1 == c2) {
-    color = c1;
+    return c1;
   } else if (fract == 0) {
-    color = c1;
+    return c1;
   } else if (fract == 255) {
-    color = c2;
-  } else if (is_black(c1)) {
-    color = CHSV(c2.h, c2.s, interpolate(c1.v, c2.v, fract));  // safe approach
-  } else if (is_black(c2)) {
-    color = CHSV(c1.h, c1.s, interpolate(c1.v, c2.v, fract));  // safe approach
+    return c2;
   } else {
-    color = CHSV(interpolate_wrap(c1.h, c2.h, fract),
+//    return getInterpHSVthruRGB(c1, c2, fract);
+//    color = CHSV(interpolate_wrap(c1.h, c2.h, fract),
+//                 255,  // s
+//                 interpolate(c1.v, c2.v, fract)
+//                );
+//  // Correct approach below does not work well for blacks
+//  } else if (is_black(c1)) {
+//    color = CHSV(c2.h, c2.s, interpolate(c1.v, c2.v, fract));  // safe approach
+//  } else if (is_black(c2)) {
+//    color = CHSV(c1.h, c1.s, interpolate(c1.v, c2.v, fract));  // safe approach
+//  } else {
+//    color = getInterpHSVthruRGB(c1, c2, fract);  // Much sadness: this does not work
+    return CHSV(interpolate_wrap(c1.h, c2.h, fract),
                  interpolate(c1.s, c2.s, fract),
                  interpolate(c1.v, c2.v, fract)
                 );
   }
-  return constrain_palette(color);  // palette adjustment
+//  return constrain_palette(color);  // palette adjustment
+}
+
+CHSV Led::getInterpHSV(CHSV c1, CHSV c2, CHSV old_color, uint8_t fract)
+{
+  // Includes palette adjustment
+  if (c1 == c2) {
+    return c1;
+  } else if (fract == 0) {
+    return c1;
+  } else if (fract == 255) {
+    return c2;
+  } else {
+//    return getInterpHSVthruRGB(c1, c2, fract);
+//    color = CHSV(interpolate_wrap(c1.h, c2.h, fract),
+//                 255,  // s
+//                 interpolate(c1.v, c2.v, fract)
+//                );
+//  // Correct approach below does not work well for blacks
+//  } else if (is_black(c1)) {
+//    color = CHSV(c2.h, c2.s, interpolate(c1.v, c2.v, fract));  // safe approach
+//  } else if (is_black(c2)) {
+//    color = CHSV(c1.h, c1.s, interpolate(c1.v, c2.v, fract));  // safe approach
+//  } else {
+//    color = getInterpHSVthruRGB(c1, c2, fract);  // Much sadness: this does not work
+    return CHSV(interpolate_wrap(c1.h, c2.h, old_color.h, fract),
+                 interpolate(c1.s, c2.s, fract),
+                 interpolate(c1.v, c2.v, fract)
+                );
+  }
+//  return constrain_palette(color);  // palette adjustment
 }
 
 CRGB Led::getInterpRGB(CRGB c1, CRGB c2, uint8_t fract)
@@ -425,12 +478,45 @@ CHSV Led::getInterpRGBthruHSV(CRGB c1, CRGB c2, uint8_t fract)
   // 1. Convert RGB colors to HSV
   // 2. Interpolate HSV colors
   // 3. Return an HSV interpolated color
-  return getInterpHSV(rgb_to_hsv(c1), rgb_to_hsv(c2), fract);
+  return getInterpHSV(rgb_to_hsv(c1), rgb_to_hsv(c2), rgb_to_hsv(c1), fract);
+}
+
+CHSV Led::getInterpHSVthruRGB(CHSV c1, CHSV c2, uint8_t fract)
+{
+  CRGB crgb1, crgb2;
+  hsv2rgb_rainbow(c1, crgb1);
+  hsv2rgb_rainbow(c2, crgb2);
+  CRGB color = CRGB(interpolate(crgb1.r, crgb2.r, fract),
+                    interpolate(crgb1.g, crgb2.g, fract),
+                    interpolate(crgb1.b, crgb2.b, fract));
+  CHSV new_color = rgb_to_hsv(color);
+  return CHSV(new_color.h, 255, new_color.s);  // Force always to saturate
 }
 
 uint8_t Led::interpolate(uint8_t a, uint8_t b, uint8_t fract)
 {
   return lerp8by8(a, b, fract);
+}
+
+uint8_t Led::interpolate_wrap(uint8_t a, uint8_t b, uint8_t old, uint8_t fract)
+{
+  uint8_t distCCW, distCW, answer1, answer2;
+
+  if (a >= b) {
+    distCW = 256 + b - a;
+    distCCW = a - b;
+  } else {
+    distCW = b - a;
+    distCCW = 256 + a - b;
+  }
+  answer1 = a + map8(fract, 0, distCW);
+  answer2 = a - map8(fract, 0, distCCW);
+  if (abs(answer1 - old) < abs(answer2 - old)) {
+    return answer1;
+  } else {
+    return answer2;
+  }
+//  return answer % 256;
 }
 
 uint8_t Led::interpolate_wrap(uint8_t a, uint8_t b, uint8_t fract)
@@ -450,6 +536,42 @@ uint8_t Led::interpolate_wrap(uint8_t a, uint8_t b, uint8_t fract)
     answer = a - map8(fract, 0, distCCW);
   }
   return answer;
+}
+
+uint8_t Led::smooth(uint8_t old_value, uint8_t new_value, uint8_t max_change)
+{
+  if (new_value >= old_value) {
+    return old_value + min(max_change, new_value - old_value);
+  } else {
+    return old_value - min(max_change, old_value - new_value);
+  }
+}
+
+uint8_t Led::smooth_wrap(uint8_t old_value, uint8_t new_value, uint8_t max_change)
+{
+  uint8_t distCCW, distCW, answer;
+
+  if (old_value >= new_value) {
+    distCW = 256 + new_value - old_value;
+    distCCW = old_value - new_value;
+  } else {
+    distCW = new_value - old_value;
+    distCCW = 256 + old_value - new_value;
+  }
+  if (distCW <= distCCW) {
+    answer = old_value + min(max_change, distCW);
+  } else {
+    answer = old_value - min(max_change, distCCW);
+  }
+  return answer % 256;
+}
+
+CHSV Led::smooth_color(CHSV old_color, CHSV new_color, uint8_t max_change)
+{
+  // Should I worry about saturation and value?
+  return CHSV(smooth_wrap(old_color.h, new_color.h, max_change),
+              new_color.s,
+              smooth(old_color.v, new_color.v, min(max_change * 4, 255)));
 }
 
 void Led::setLedMap(uint8_t *led_map_pointer)
@@ -494,14 +616,28 @@ uint8_t Led::lookupLed(uint8_t i)
   }
 }
 
+void Led::turnOffLedMap()
+{
+  is_mapped = false;
+}
+
+void Led::turnOnLedMap()
+{
+  is_mapped = true;
+}
+
 uint8_t Led::getNeighbor(uint8_t pos, uint8_t dir)
 {
   if (is_neighbor_mapped && pos != XX) {
-    uint8_t num_neighbors = (has_hex_shape) ? 6 : 4;  // HexGrid = 6, SquareGrid = 4
     return pgm_read_byte_near(neighbors + (pos * num_neighbors) + (dir % num_neighbors));
   } else {
     return pos;  // Dummy default will show strange behaviour
   }
+}
+
+uint8_t Led::getSymmetry()
+{
+   return num_neighbors;
 }
 
 uint8_t Led::getLedFromCoord(uint8_t x, uint8_t y)
