@@ -57,15 +57,24 @@ class Led
       wheel(uint8_t hue),
       gradient_wheel(uint8_t hue, uint8_t intensity);
     CHSV rgb_to_hsv( CRGB color);
-    CHSV getInterpHSV(CHSV c1, CHSV c2, uint8_t fract);
-    CRGB getInterpRGB(CRGB c1, CRGB c2, uint8_t fract);
+    CHSV
+      getInterpHSV(CHSV c1, CHSV c2, uint8_t fract),
+      getInterpHSV(CHSV c1, CHSV c2, CHSV old_color, uint8_t fract),
+      getInterpHSVthruRGB(CHSV c1, CHSV c2, uint8_t fract),
+      smooth_color(CHSV old_color, CHSV new_color, uint8_t max_change);
+    CRGB
+        getInterpRGB(CRGB c1, CRGB c2, uint8_t fract);
     CHSV getInterpRGBthruHSV(CRGB c1, CRGB c2, uint8_t fract);
     void RGBtoHSV(uint8_t red, uint8_t green, uint8_t blue, float *h, float *s, float *v );
+    void rgb2hsv_new(uint8_t src_r, uint8_t src_g, uint8_t src_b, uint8_t *dst_h, uint8_t *dst_s, uint8_t *dst_v);
     bool
       is_black(CHSV color);
     uint8_t
       interpolate(uint8_t a, uint8_t b, uint8_t fract),
-      interpolate_wrap(uint8_t a, uint8_t b, uint8_t fract);
+      interpolate_wrap(uint8_t a, uint8_t b, uint8_t fract),
+      interpolate_wrap(uint8_t a, uint8_t b, uint8_t old_value, uint8_t fract),
+      smooth(uint8_t old_value, uint8_t new_value, uint8_t max_change),
+      smooth_wrap(uint8_t old_value, uint8_t new_value, uint8_t max_change);
     void
       setPalette(uint8_t palette_start, uint8_t palette_width),  // turns palettes on
       setPalette(void),  // turn palettes on with default values
@@ -73,16 +82,16 @@ class Led
     void
       turnPalettesOn(void), turnPalettesOff(void);
     void
-      setAsSquare(void);
+      setAsSquare(void), setAsPentagon(void);
     void randomizePalette(void);
     CHSV constrain_palette(CHSV color);
 
   private:
 
     // variables
-    uint8_t numLeds, width_2d;
+    uint16_t numLeds;
+    uint8_t width_2d;
 
-    CRGB *led_rgbs;
     CHSV *current_frame;
     CHSV *next_frame;
     CHSV *interp_frame;
@@ -99,8 +108,9 @@ class Led
     uint8_t blur_amount;
 
     bool
-      is_mapped, is_2d_mapped, is_neighbor_mapped, has_hex_shape;  // Are the LEDs explicitly mapped?
+      is_mapped, is_2d_mapped, is_neighbor_mapped;  // Are the LEDs explicitly mapped?
 
+    uint8_t num_neighbors;
     // private functions
 
 };

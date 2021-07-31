@@ -27,9 +27,11 @@ class Shows
       setForeColorSpeed(uint8_t amount), setBackColorSpeed(uint8_t amount),
       IncForeColor(uint8_t amount), IncBackColor(uint8_t amount),
       setPixeltoForeColor(uint8_t i), setPixeltoBackColor(uint8_t i),
-      setPixeltoHue(uint8_t i, uint8_t h), setPixeltoBlack(uint8_t i),
+      setPixeltoHue(uint8_t i, uint8_t h),
+      setPixeltoBlack(uint8_t i), setPixeltoForeBlack(uint8_t i), setPixeltoBackBlack(uint8_t i),
       setPixeltoColor(uint8_t i, CHSV color),
-      fillForeColor(void), fillBackColor(void), fillBlack(void),
+      fill(CHSV color), fillForeColor(void), fillBackColor(void),
+      fillBlack(void), fillForeBlack(void), fillBackBlack(void),
       morphFrame(void),
       advanceClock(void),
       resetAllClocks(void),
@@ -46,7 +48,7 @@ class Shows
       setWaitRange(uint8_t wait_min, uint8_t wait_max),
       setWaitRange(uint8_t wait_min, uint8_t wait_max, uint8_t num_wait_values),
       makeWaitSlower(uint8_t r), makeWaitFaster(uint8_t r),
-      setAsSquare(void);
+      setAsSquare(void), setAsPentagon(void);
     void
       turnOffMorphing(void), turnOnMorphing(void);
     void
@@ -54,12 +56,15 @@ class Shows
     uint8_t
       getForeColor(void), getBackColor(void),
       getForeColorSpeed(void), getBackColorSpeed(void);
+    CHSV
+      getForeBlack(void), getBackBlack(void);
     uint8_t
       IncColor(uint8_t hue, uint8_t amount),
       up_or_down(uint8_t value, uint8_t min_value, uint8_t max_value);
     uint8_t
       getWait(void),
       getMorph(void),
+      getMorphFract(void),
       getNumFrames(void),
       getNumLeds(void);
     uint8_t
@@ -72,6 +77,12 @@ class Shows
       isShowStart(void);
     bool
       isMorphing(void);
+    uint8_t
+      num_balls;
+    uint8_t
+      *bounce_dir, *bounce_pos;
+    void
+      clearTrails(void);
 
   private:
 
@@ -87,23 +98,22 @@ class Shows
     uint32_t smallCycle;
     uint8_t wait;
 
-    bool has_morphing, has_hex_shape, has_blur;
+    bool has_morphing, has_blur;
 
     uint8_t color_speed_min, color_speed_max;
     uint8_t bands_min_bpm, bands_max_bpm;
     uint8_t bands_bpm_1, bands_bpm_2;
     uint8_t band_min_1, band_min_2;
     uint8_t wait_min, wait_max, num_wait_values;
+    uint8_t num_neighbors;
 
     uint8_t *shuffle;
 
     uint8_t *plink, *trail;
-    uint8_t *bounce_dir, *bounce_pos;
-    uint8_t num_plinko, num_balls;
+    uint8_t num_plinko;
     uint8_t *packet_intense, *packet_freq, *packet_color;
 
     // private functions
-    void clearTrails(void);
     uint8_t getTrail(uint8_t trail_num, uint8_t dist);
     void setTrail(uint8_t trail_num, uint8_t dist, uint8_t value);
 };
