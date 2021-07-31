@@ -967,14 +967,14 @@ uint8_t convert_pixel_to_led(uint8_t i) {
 //
 // mirror_pixels
 //
-void mirror_pixels(uint8_t channel) {
+void mirror_pixels(uint8_t channel) {  
   uint8_t symmetry = show_variables[4 + channel];
-  
+  symmetry = 4;
   if (symmetry == 1 || symmetry == 3) {  // Horizontal mirroring
     for (uint8_t y = 0 ; y < SIZE; y++) {
       for (uint8_t x = 0 ; x < SIZE; x++) {
-        if (x > y) {
-          led[channel].setInterpFrame(get_pixel_from_coord(y,x), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
+        if (y >= SIZE / 2) {
+          led[channel].setInterpFrame(get_pixel_from_coord(x, SIZE - y - 1), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
         }
       }
     }
@@ -983,10 +983,8 @@ void mirror_pixels(uint8_t channel) {
   if (symmetry == 2 || symmetry == 3) {  // Vertical mirroring
     for (uint8_t y = 0 ; y < SIZE; y++) {
       for (uint8_t x = 0 ; x < SIZE; x++) {
-        if (x + y < SIZE - 1) {
-          uint8_t new_y = SIZE - x - 1;
-          uint8_t new_x = x - y + new_y;
-          led[channel].setInterpFrame(get_pixel_from_coord(new_x, new_y), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
+        if (x >= SIZE / 2) {
+          led[channel].setInterpFrame(get_pixel_from_coord(SIZE - x - 1, y), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
         }
       }
     }

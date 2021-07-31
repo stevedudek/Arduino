@@ -12,16 +12,16 @@
 //
 //  Removed: Noise, palettes, 2D shows (need to do this on Show repository)
 //
-//  3/16/2019
+//  11/20/2018
 //
-#define NUM_LEDS 69  // Chance of memory shortage for large NUM_LEDS
-#define TOTAL_LEDS  (NUM_LEDS * 2)  // Symmetric
+#define NUM_LEDS 13  // Chance of memory shortage for large NUM_LEDS
 
 #define BRIGHTNESS  255 // (0-255)
 
-#define DELAY_TIME 40  // in milliseconds. FastLED demo has 8.3 ms delay!
+#define DELAY_TIME 20  // in milliseconds. FastLED demo has 8.3 ms delay!
 
-#define DATA_PIN 7
+#define DATA_PIN 9
+#define CLOCK_PIN 8
 
 #define CHANNEL_A  0  // Don't change these
 #define CHANNEL_B  1
@@ -30,19 +30,21 @@
 Led led[] = { Led(NUM_LEDS), Led(NUM_LEDS) };  // Class instantiation of the 2 Led libraries
 Shows shows[] = { Shows(&led[CHANNEL_A]), Shows(&led[CHANNEL_B]) };  // 2 Show libraries
 CHSV leds_buffer[DUAL][NUM_LEDS];  // CHSV buffers for Channel A + B; may break the memory bank
-CRGB leds[TOTAL_LEDS];  // Hook for FastLED library
+CRGB leds[NUM_LEDS];  // Hook for FastLED library
 
 // Shows
-#define START_SHOW_CHANNEL_A  3  // Channels A starting show
+#define START_SHOW_CHANNEL_A  0  // Channels A starting show
 #define START_SHOW_CHANNEL_B  1  // Channels B starting show
 uint8_t current_show[] = { START_SHOW_CHANNEL_A, START_SHOW_CHANNEL_B };
 #define NUM_SHOWS 12
 
 // Clocks and time
 #define SHOW_DURATION 30  // seconds
-#define FADE_TIME 3   // seconds to fade in. If FADE_TIME = SHOW_DURATION, then Always Be Fading
+#define FADE_TIME 30   // seconds to fade in. If FADE_TIME = SHOW_DURATION, then Always Be Fading
 uint32_t MAX_SMALL_CYCLE = SHOW_DURATION * 2 * (1000 / DELAY_TIME);  // *2! 50% = all on, 50% = all off, and rise + decay on edges
 #define FADE_CYCLES  (FADE_TIME * 1000 / DELAY_TIME)  // cycles to fade in + out
+
+#define IS_ONLY_RED true
 
 //
 // Setup
@@ -56,7 +58,7 @@ void setup() {
   Serial.begin(9600);
   Serial.println("Start");
 
-  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, TOTAL_LEDS);  // Only 1 leds object
+  FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);  // Only 1 leds object
   FastLED.setBrightness( BRIGHTNESS );
 
   // Set up the various mappings here (1D lists in PROGMEM)
@@ -174,28 +176,13 @@ void update_leds() {
 void morph_channels(uint8_t fract) {
   for (int i = 0; i < NUM_LEDS; i++) {
     CHSV color = led[CHANNEL_A].getInterpHSV(leds_buffer[CHANNEL_B][i], 
-                                             leds_buffer[CHANNEL_A][i], 
-                                             fract);  // interpolate a + b channels
-    leds[lookup_led(i)] = color;
-    leds[get_paired_led(i)] = color;
+                                          leds_buffer[CHANNEL_A][i], 
+                                          fract);  // interpolate a + b channels
+    if (IS_ONLY_RED) {
+      color.h = map8(color.h, 192, 64);
+    }
+    leds[i] = color;
   }
-}
-
-//
-// lookup_led
-//
-uint8_t lookup_led(uint8_t i) {
-  if (i <= 47) return i;
-  else return i + 20;
-}
-
-//
-// get_paired_led
-//
-uint8_t get_paired_led(uint8_t i) {
-  if (i <= 27) return 135 - (i - 0); // map(i, 0, 27, 135, 108);
-  else if (i <= 47) return 67 - (i - 28); //map(i, 28, 47, 67, 48);
-  else return 107 - (i - 48); // map(i, 48, 67, 108, 88);
 }
 
 //

@@ -5,7 +5,7 @@
 //
 //  Big Pentagon: 12 x 12 = 144 lights in a square/pentagon grid
 //
-//  9/21/20
+//  9/14/20
 //
 //  ArduinoBlue wireless bluetooth controller (ArduinoBlue)
 //
@@ -52,14 +52,14 @@ uint8_t curr_lightning = 0;
 
 // Shows
 #define NUM_SHOWS 20
-#define START_SHOW_CHANNEL_A  0  // Startings shows for Channels A + B
-#define START_SHOW_CHANNEL_B  1
+#define START_SHOW_CHANNEL_A  1  // Startings shows for Channels A + B
+#define START_SHOW_CHANNEL_B  0
 uint8_t current_show[] = { START_SHOW_CHANNEL_A, START_SHOW_CHANNEL_B };
 uint8_t show_variables[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };  // 2 each: pattern, rotate, symmetry, mask, pattern_type, wipe_type
 
 // wait times
-#define SHOW_DURATION 100  // seconds
-uint8_t FADE_TIME = 50;  // seconds to fade in + out (Arduino Blue)
+#define SHOW_DURATION 10  // seconds
+uint8_t FADE_TIME = 5;  // seconds to fade in + out (Arduino Blue)
 uint32_t MAX_SMALL_CYCLE = SHOW_DURATION * 2 * (1000 / DELAY_TIME);  // *2! 50% = all on, 50% = all off, and rise + decay on edges
 #define FADE_CYCLES  (FADE_TIME * 1000 / DELAY_TIME)  // cycles to fade in + out
 uint8_t freq_storage[] = { 60, 80 };  // variable storage for shows
@@ -235,6 +235,7 @@ uint8_t neighbors[] PROGMEM = {
 };
 
 #define NUM_PATTERNS 21   // Total number of patterns, each 18 bytes wide
+#define NUM_COLOR_PATTERNS 6   // Total number of color patterns, each 1 + 72 = 73 bytes
 
 //
 // Setup
@@ -276,6 +277,9 @@ void setup() {
     hue_start = 192;
     hue_width = 124;
   }
+//  Serial.println(led[0].getInterpHSV( CHSV( 134, 255,255), CHSV( 5, 255, 255), 96).h);
+//  Serial.println(led[0].getInterpHSV( CHSV( 134, 255,255), CHSV( 6, 255, 255), 92).h);
+//  Serial.println(led[0].getInterpHSV( CHSV( 136, 255,255), CHSV( 6, 255, 255), 91).h);
 }
 
 //
@@ -291,7 +295,8 @@ void loop() {
         patterns(i);
         break;
       case 1:
-        shows[i].morphChain();
+        halfsies(i);
+//        shows[i].morphChain();
         break;
       case 2:
         shows[i].bounce();
@@ -348,6 +353,7 @@ void loop() {
         shows[i].bands();
         break;
     }
+  
     shows[i].morphFrame();  // 1. calculate interp_frame 2. adjust palette
   }
 
@@ -355,7 +361,12 @@ void loop() {
   morph_channels(get_intensity(CHANNEL_A));  // morph together the 2 leds channels and deposit on to Channel_A
   FastLED.show();  // Update the display
   fixed_delay();
+  
   advance_clocks();  // advance the cycle clocks and check for next show
+
+  //// Checked
+  // ForeColor and BackColor for both channels does not change rapidly
+  // Intensity for both channels never changes rapidly
 }
 
 //
@@ -403,24 +414,21 @@ void next_show(uint8_t i) {
 // pick_next_show - dependent on channel i
 //
 void pick_next_show(uint8_t i) {
-  uint8_t mask = 0;
-  uint8_t symmetry = 0; 
-  uint8_t rotation = 0;
-  current_show[i] = is_other_channel_show_zero(i) ? random(1, NUM_SHOWS) : 0 ;
-  show_variables[i] = random(NUM_PATTERNS);
+//  uint8_t mask = 0;
+//  uint8_t symmetry = 0; 
+  current_show[i] = is_other_channel_show_zero(i) ? 1 : 0 ;
+  /*
   mask = pick_random_mask(i);
   if (mask == 0) {
     symmetry = pick_random_symmetry();
-    if (symmetry == 0) {
-      rotation = random(3);
-    }
   }
   show_variables[i + 6] = mask;
   show_variables[i + 4] = symmetry;
-  show_variables[i + 2] = rotation;
+  show_variables[i + 2] = random(4);
 //  current_show[i] = (current_show[i] + 1) % NUM_SHOWS;  // For debugging
-  shows[i].pickRandomColorSpeeds();
-//  shows[i].tweakColorSpeeds();
+//  shows[i].pickRandomColorSpeeds();
+*/
+  shows[i].tweakColorSpeeds();
   shows[i].pickRandomWait();
 //  log_status(i);  // For debugging
 }
@@ -435,8 +443,8 @@ boolean is_other_channel_show_zero(uint8_t channel) {
 
 uint8_t pick_random_mask(uint8_t i) {
   // 2 bit identities x 2 color/black = 4 possibilities
-  if (current_show[i] != 0 && random(1, 4) == 1) {
-    return random(1, 5);
+  if (current_show[i] != 0 && random8(1, 4) == 1) {
+    return random8(1, 5);
   } else {
     return 0;
   }
@@ -484,7 +492,7 @@ void patterns(uint8_t c) {
   // Reset a lot of variables at the start of the show
   if (shows[c].isShowStart()) {
     shows[c].turnOffMorphing();  // Because we are using a beatsin8
-    show_variables[c] = random(NUM_PATTERNS);  // Pick a pattern
+    show_variables[c] = 0; //random(NUM_PATTERNS);  // Pick a pattern
     show_variables[c + 8] = pick_random_pattern_type();   // Pick a fill algorithm
     show_variables[c + 10] = random(6);  // Pick a different wipes
   }
@@ -519,6 +527,18 @@ void patterns(uint8_t c) {
             shows[c].setPixeltoColor(i, led[c].gradient_wheel(back_hue, map8(intense, 64, 255)));
           }
         }
+      }
+    }
+  }
+}
+
+void halfsies(uint8_t c) {
+  for (uint8_t x = 0; x < SIZE; x++) {
+    for (uint8_t y = 0; y < SIZE; y++) {
+      if (x < SIZE / 2) {
+        shows[c].setPixeltoBackColor(get_pixel_from_coord(x,y));
+      } else {
+        shows[c].setPixeltoBackBlack(get_pixel_from_coord(x,y));
       }
     }
   }
@@ -585,7 +605,7 @@ uint8_t get_wipe_intensity(uint8_t x, uint8_t y, uint8_t wipe_number, uint8_t c,
 void bounceGlowing(uint8_t channel) {
   
   if (shows[channel].isShowStart()) {
-    shows[channel].num_balls = random(2, 4);
+    shows[channel].num_balls = random8(2, 4);
     shows[channel].clearTrails();
   }
 
@@ -616,7 +636,7 @@ void bounceGlowing(uint8_t channel) {
     uint8_t max_attempts = 10;
 
     while (getNeighbor(ball_position, shows[channel].bounce_dir[n]) == XX || random(0, PENTAGON * 3) == 0) {
-            shows[channel].bounce_dir[n] = random(0, PENTAGON);
+            shows[channel].bounce_dir[n] = random8(0, PENTAGON);
             if (max_attempts-- == 0) {
               break;
             }
@@ -711,7 +731,7 @@ void well(uint8_t c) {
 }
 
 void corner_ring(uint8_t c) {
-  ring(c, shows[c].getForeColor(), shows[c].getForeBlack(), 0, 0, 3, 32, 128);
+  ring(c, shows[c].getForeColor(), shows[c].getForeBlack(), 0, 0, 3, 32, 164);
 }
 
 void ring(uint8_t c, uint8_t color, CHSV background, uint8_t center_x, uint8_t center_y, uint8_t ring_speed, uint8_t cutoff, uint8_t ring_freq) {
@@ -725,13 +745,14 @@ void ring(uint8_t c, uint8_t color, CHSV background, uint8_t center_x, uint8_t c
   CHSV foreColor = led[c].wheel(color);
   led[c].fill(background);
   uint8_t value = shows[c].getCycle() / ring_speed;
+//  uint8_t value = ((shows[c].getCycle() / ring_speed) + (map8(shows[c].getMorphFract(), 0, ring_speed))) % 256;
 
   for (uint8_t y = 0; y < SIZE; y++) {
     for (uint8_t x = 0; x < SIZE; x++) {
       uint8_t delta = abs(get_distance_to_coord(x, y, center_x, center_y) - value) % ring_freq;
       if (delta < cutoff) {
         uint8_t intensity = map(delta, 0, cutoff, 255, 0);
-        shows[c].setPixeltoColor(get_pixel_from_coord(x, y), led[c].getInterpHSV(background, foreColor, intensity));
+        shows[c].setPixeltoColor(get_pixel_from_coord(x, y), led[c].getInterpHSV(background, foreColor, background, intensity));
       }
     }
   }
@@ -909,13 +930,46 @@ void morph_channels(uint8_t fract) {
     if (led_number != XX) {
       CHSV color_b = mask(led[CHANNEL_B].getInterpFrameColor(rotate_pixel(i, CHANNEL_B)), i, CHANNEL_B);
       CHSV color_a = mask(led[CHANNEL_A].getInterpFrameColor(rotate_pixel(i, CHANNEL_A)), i, CHANNEL_A);
-      CHSV color = led[CHANNEL_A].getInterpHSV(color_b, color_a, fract);  // interpolate a + b channels
-      color = lightning(narrow_palette(color));  // (ArduinoBlue)
+//      CHSV color_x = led[CHANNEL_A].getInterpHSV(color_a, color_b, led_buffer[led_number], fract);  // interpolate a + b channels
+      CHSV color_x = led[CHANNEL_A].getInterpHSV(color_a, color_b, fract);  // interpolate a + b channels
+      color_x = lightning(narrow_palette(color_x));  // (ArduinoBlue)
       if (SMOOTHING > 0) {
-        color = led[CHANNEL_A].smooth_color(led_buffer[led_number], color, SMOOTHING);  // smoothing
+        color_x = led[CHANNEL_A].smooth_color(led_buffer[led_number], color_x, SMOOTHING);  // smoothing
       }
-      leds[led_number] = color;
-      led_buffer[led_number] = color;
+      leds[led_number] = color_x;
+      /*
+      if (i == 2 && abs(color_x.h - led_buffer[led_number].h) > 5 && abs(color_x.h - led_buffer[led_number].h) < 250) {
+        // Dump small Cycle clocks
+        
+        Serial.print("time: ");
+        Serial.print(millis() / 1000);
+        Serial.print(".");
+        Serial.print(millis() % 1000);
+        Serial.print(" Small Cycle A | B: ");
+        Serial.print(shows[0].getSmallCycle());
+        Serial.print(" | ");
+        Serial.println(shows[1].getSmallCycle());
+        
+        Serial.println("A | B | fract | result | old ");
+        
+        Serial.print(color_a.h);
+        Serial.print(" | ");
+        Serial.print(color_b.h);
+        Serial.print(" | ");
+        Serial.print(fract);
+        Serial.print(" | ");
+        Serial.print(color_x.h);
+        Serial.print(" | ");
+        Serial.println(led_buffer[led_number].h);
+
+        Serial.print("A / B morph fract: ");
+        Serial.print(shows[CHANNEL_A].getMorphFract());
+        Serial.print(" / ");
+        Serial.println(shows[CHANNEL_B].getMorphFract());
+        Serial.println();
+      }
+      */
+      led_buffer[led_number] = color_x;
     }
   }
   turn_off_spacer_leds();
@@ -967,14 +1021,14 @@ uint8_t convert_pixel_to_led(uint8_t i) {
 //
 // mirror_pixels
 //
-void mirror_pixels(uint8_t channel) {
+void mirror_pixels(uint8_t channel) {  
   uint8_t symmetry = show_variables[4 + channel];
-  
+  symmetry = 4;
   if (symmetry == 1 || symmetry == 3) {  // Horizontal mirroring
     for (uint8_t y = 0 ; y < SIZE; y++) {
       for (uint8_t x = 0 ; x < SIZE; x++) {
-        if (x > y) {
-          led[channel].setInterpFrame(get_pixel_from_coord(y,x), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
+        if (y >= SIZE / 2) {
+          led[channel].setInterpFrame(get_pixel_from_coord(x, SIZE - y - 1), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
         }
       }
     }
@@ -983,10 +1037,8 @@ void mirror_pixels(uint8_t channel) {
   if (symmetry == 2 || symmetry == 3) {  // Vertical mirroring
     for (uint8_t y = 0 ; y < SIZE; y++) {
       for (uint8_t x = 0 ; x < SIZE; x++) {
-        if (x + y < SIZE - 1) {
-          uint8_t new_y = SIZE - x - 1;
-          uint8_t new_x = x - y + new_y;
-          led[channel].setInterpFrame(get_pixel_from_coord(new_x, new_y), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
+        if (x >= SIZE / 2) {
+          led[channel].setInterpFrame(get_pixel_from_coord(SIZE - x - 1, y), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
         }
       }
     }
@@ -1000,7 +1052,7 @@ uint8_t rotate_pixel(uint8_t i, uint8_t channel) {
   uint8_t x = i % SIZE;
   uint8_t y = i / SIZE;
   uint8_t rotation = show_variables[2 + channel];  // Very strange memory bug here
-
+  
   if (rotation > 1) {
     y = SIZE - y - 1;
   }
@@ -1042,7 +1094,7 @@ uint8_t get_intensity(uint8_t i) {
   } else {
     intensity = 0;
   }
-  return ease8InOutQuad(intensity);
+  return ease8InOutCubic(intensity);
 }
 
 //// End DUAL SHOW LOGIC

@@ -1,23 +1,22 @@
 #include <FastLED.h>
 #include <Led.h>
 #include <Shows.h>
-#include <ArduinoBlue.h>  // (ArduinoBlue)
+//#include <ArduinoBlue.h>  // (ArduinoBlue)
 //
 //  Big Pentagon: 12 x 12 = 144 lights in a square/pentagon grid
 //
-//  9/21/20
-//
-//  ArduinoBlue wireless bluetooth controller (ArduinoBlue)
+//  6/21/21
 //
 //  Dual shows - Blend together 2 shows running at once
 //
 //  2 CHSV buffers for Channel A + B
 //  interpolate the two buffers on to the CRGB leds
+//
 
 uint8_t BRIGHTNESS = 255;  // (0-255) (ArduinoBlue)
 
 uint8_t DELAY_TIME = 20;  // in milliseconds. A cycle takes 3-5 milliseconds. 15+ is safe.
-long last_time;
+long last_time, last_connection;
 #define SMOOTHING 1   // 0 = no smooth, lower the number = more smoothing
 
 #define DATA_PIN 7
@@ -31,6 +30,12 @@ long last_time;
 #define CHANNEL_B  1
 #define DUAL       2  // How many shows to run at once (dual = 2). Don't change.
 
+#define ARE_CONNECTED false  // Are the pentagons talking to each other?
+#define IS_SPEAKING true  // true = speaking, false = hearing
+
+boolean is_lost = false;
+#define MAX_SILENT_TIME  (3 * 1000)  // Time (in sec) without communication before marked as is_lost
+
 #define SIZE  12
 
 #define PIXEL_X_SPACING  (255 / (SIZE - 1))
@@ -40,10 +45,10 @@ long last_time;
 
 Led led[] = { Led(NUM_LEDS), Led(NUM_LEDS) };  // Class instantiation of the 2 Led libraries
 Shows shows[] = { Shows(&led[CHANNEL_A]), Shows(&led[CHANNEL_B]) };  // 2 Show libraries
+CHSV led_buffer[NUM_LEDS];  // For smoothing
 CRGB leds[NUM_LEDS];  // The Leds themselves
-CHSV led_buffer[TOTAL_LEDS];  // For smoothing
 
-#define ONLY_RED false  // (ArduinoBlue)
+#define ONLY_RED true  // (ArduinoBlue)
 uint8_t hue_start = 0;
 uint8_t hue_width = 255;
 uint8_t curr_lightning = 0;
@@ -53,14 +58,14 @@ uint8_t curr_lightning = 0;
 // Shows
 #define NUM_SHOWS 20
 #define START_SHOW_CHANNEL_A  0  // Startings shows for Channels A + B
-#define START_SHOW_CHANNEL_B  1
+#define START_SHOW_CHANNEL_B  17
 uint8_t current_show[] = { START_SHOW_CHANNEL_A, START_SHOW_CHANNEL_B };
 uint8_t show_variables[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };  // 2 each: pattern, rotate, symmetry, mask, pattern_type, wipe_type
 
 // wait times
-#define SHOW_DURATION 100  // seconds
-uint8_t FADE_TIME = 50;  // seconds to fade in + out (Arduino Blue)
-uint32_t MAX_SMALL_CYCLE = SHOW_DURATION * 2 * (1000 / DELAY_TIME);  // *2! 50% = all on, 50% = all off, and rise + decay on edges
+#define SHOW_DURATION 80  // seconds
+uint8_t FADE_TIME = 80;  // seconds to fade in + out (Arduino Blue)
+#define MAX_SMALL_CYCLE  (SHOW_DURATION * 2 * (1000 / DELAY_TIME))  // *2! 50% = all on, 50% = all off, and rise + decay on edges
 #define FADE_CYCLES  (FADE_TIME * 1000 / DELAY_TIME)  // cycles to fade in + out
 uint8_t freq_storage[] = { 60, 80 };  // variable storage for shows
 #define RING_SPEED 10  // Lower is faster
@@ -76,7 +81,7 @@ boolean LIFE_BOARD[TOTAL_LIFE];  // Make this a 2-bit compression
 #define BALL_SIZE 30
 
 // ArduinoBlue
-ArduinoBlue phone(Serial2); // Blue Tx = pin 9; Blue Rx = pin 10
+//ArduinoBlue phone(Serial2); // Blue Tx = pin 9; Blue Rx = pin 10
 #define HUE_SLIDER        0
 #define HUE_WIDTH_SLIDER  1
 #define SPEED_SLIDER      2
@@ -84,6 +89,33 @@ ArduinoBlue phone(Serial2); // Blue Tx = pin 9; Blue Rx = pin 10
 #define FADE_TIME_SLIDER  4
 #define BAM_BUTTON        0
 #define BOLT_TIME        20
+
+// xBee language
+#define COMMAND_START      '+'
+#define COMMAND_FORE       'F'
+#define COMMAND_BACK       'B'
+#define COMMAND_BRIGHTNESS 'I'
+#define COMMAND_PALETTE    'H'
+#define COMMAND_PAL_WIDTH  'J'
+#define COMMAND_SPEED      'Y'
+#define COMMAND_MASK       'M'
+#define COMMAND_P_TYPE     'p'
+#define COMMAND_W_TYPE     'w'
+#define COMMAND_FADE       'R'
+#define COMMAND_WAIT       'W'
+#define COMMAND_SHOW       'S'
+#define COMMAND_SM_CYCLE   'C'
+#define COMMAND_PATTERN    'P'
+#define COMMAND_BOLT       'X'
+#define COMMAND_CHANNEL_A  'x'
+#define COMMAND_CHANNEL_B  'y'
+#define COMMAND_COMMA      ','
+#define COMMAND_PERIOD     '.'
+#define EMPTY_CHAR         ' '
+#define MAX_MESSAGE       120
+#define MAX_NUM             6  // To handle 65,535 of small_cycle
+char message[MAX_MESSAGE];     // Incoming message buffer
+char number_buffer[MAX_NUM];   // Incoming number buffer
 
 // Lookup tables
 
@@ -241,13 +273,14 @@ uint8_t neighbors[] PROGMEM = {
 //
 void setup() {
 
-  delay( 3000 ); // power-up safety delay
+  delay( 1000 ); // power-up safety delay
 
   randomSeed(analogRead(0));
   
   Serial.begin(9600);
+//  Serial1.begin(9600);  // Serial1: xBee port
+//  Serial2.begin(9600);  // Serial2: Bluetooth serial (ArduinoBlue)
   Serial.println("Start");
-  Serial2.begin(9600);  // Serial2: Bluetooth serial (ArduinoBlue)
 
   FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN>(leds, TOTAL_LEDS);
   FastLED.setBrightness( BRIGHTNESS );
@@ -259,8 +292,9 @@ void setup() {
     led[i].push_frame();
     shows[i] = Shows(&led[i]);  // Show library - reinitialized for led mappings
     
-    shows[i].setColorSpeedMinMax(6,30);  // Make colors change faster (lower = faster)
-    shows[i].setBandsBpm(10, 30);
+//    shows[i].setColorSpeedMinMax(6,30);  // Make colors change faster (lower = faster)
+    shows[i].setWaitRange(10, 100);
+    shows[i].setBandsBpm(10, 25);
 
     shows[i].setAsPentagon();
   }
@@ -268,7 +302,7 @@ void setup() {
   shows[CHANNEL_B].setSmallCycle(MAX_SMALL_CYCLE / 2);
   last_time = millis();
 
-  for (uint8_t i = 0; i < TOTAL_LEDS; i++) {
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
     led_buffer[i] = CHSV(0, 0, 0);
   }
   
@@ -300,7 +334,7 @@ void loop() {
         bounceGlowing(i);
         break;
       case 4:
-        shows[i].plinko(119);  // 35
+        shows[i].plinko(119);
         break;
       case 5:
         windmill(i);
@@ -351,11 +385,12 @@ void loop() {
     shows[i].morphFrame();  // 1. calculate interp_frame 2. adjust palette
   }
 
-  check_phone();  // Check the phone settings (ArduinoBlue)
+//  check_phone();  // Check the phone settings (ArduinoBlue)
   morph_channels(get_intensity(CHANNEL_A));  // morph together the 2 leds channels and deposit on to Channel_A
   FastLED.show();  // Update the display
   fixed_delay();
   advance_clocks();  // advance the cycle clocks and check for next show
+//  speak_and_hear();  // speak out or hear in signals
 }
 
 //
@@ -392,11 +427,10 @@ void fixed_delay() {
 // next_show - dependent on channel i
 //
 void next_show(uint8_t i) {
-//  led[i].fillBlack();
   led[i].push_frame();
   shows[i].resetAllClocks();
   shows[i].turnOnMorphing();
-  shows[i].setWaitRange(5, 60);
+  shows[i].setWaitRange(10, 100);
 }
 
 //
@@ -404,24 +438,22 @@ void next_show(uint8_t i) {
 //
 void pick_next_show(uint8_t i) {
   uint8_t mask = 0;
-  uint8_t symmetry = 0; 
-  uint8_t rotation = 0;
+  uint8_t symmetry = 0;
+  
   current_show[i] = is_other_channel_show_zero(i) ? random(1, NUM_SHOWS) : 0 ;
   show_variables[i] = random(NUM_PATTERNS);
   mask = pick_random_mask(i);
+  
   if (mask == 0) {
     symmetry = pick_random_symmetry();
-    if (symmetry == 0) {
-      rotation = random(3);
-    }
   }
+  
   show_variables[i + 6] = mask;
   show_variables[i + 4] = symmetry;
-  show_variables[i + 2] = rotation;
-//  current_show[i] = (current_show[i] + 1) % NUM_SHOWS;  // For debugging
+  show_variables[i + 2] = random(4);
   shows[i].pickRandomColorSpeeds();
-//  shows[i].tweakColorSpeeds();
   shows[i].pickRandomWait();
+  speak_and_hear();
 //  log_status(i);  // For debugging
 }
 
@@ -447,17 +479,12 @@ uint8_t pick_random_pattern_type() {
 }
 
 uint8_t pick_random_symmetry() {
-  uint8_t random_symmetry = random(10);
+  uint8_t random_symmetry = random(12);
   
-  if (random_symmetry < 2) {
-    return 3;  // 4-fold
-  } else if (random_symmetry < 4) {
-    return 1;  // Horizontal mirroring
-  } else if (random_symmetry < 6) {
-    return 2;  // Vertical mirroring
-  } else {
-    return 0;  
+  if (random_symmetry <= 6) {
+    return random_symmetry;
   }
+  return 0;  // No symmetrizing
 }
 
 //
@@ -514,7 +541,7 @@ void patterns(uint8_t c) {
           uint8_t intense = get_wipe_intensity(x, y, show_variables[c + 10], c, (pattern_type < 4));
           uint8_t back_hue = shows[c].getBackColor();
           if (pattern_type < 4) {
-            shows[c].setPixeltoHue(i, shows[c].IncColor(back_hue, intense));
+            shows[c].setPixeltoHue(i, shows[c].IncColor(back_hue, intense / 2));
           } else {
             shows[c].setPixeltoColor(i, led[c].gradient_wheel(back_hue, map8(intense, 64, 255)));
           }
@@ -703,28 +730,29 @@ void windmill_smoothed(uint8_t i) {
 // rings
 //
 void center_ring(uint8_t c) {
-  ring(c, shows[c].getForeColor(), shows[c].getForeBlack(), 128, 128, 1, 32, 128);
+  ring(c, shows[c].getForeColor(), shows[c].getForeBlack(), 128, 128, 32, 128);
 }
 
 void well(uint8_t c) {
-  ring(c, shows[c].getForeColor(), led[c].wheel(shows[c].getBackColor()), 128, 128, 2, 192, 192);
+  ring(c, shows[c].getForeColor(), led[c].wheel(shows[c].getBackColor()), 128, 128, 192, 192);
 }
 
 void corner_ring(uint8_t c) {
-  ring(c, shows[c].getForeColor(), shows[c].getForeBlack(), 0, 0, 3, 32, 128);
+  ring(c, shows[c].getForeColor(), shows[c].getForeBlack(), 0, 0, 32, 128);
 }
 
-void ring(uint8_t c, uint8_t color, CHSV background, uint8_t center_x, uint8_t center_y, uint8_t ring_speed, uint8_t cutoff, uint8_t ring_freq) {
+void ring(uint8_t c, uint8_t color, CHSV background, uint8_t center_x, uint8_t center_y, uint8_t cutoff, uint8_t ring_freq) {
   // center_x, center_y = ring center coordinates; (5,5) is hex centers
   // ring_speed = 1+. Higher = faster.
   // cutoff = ring thickness with higher values = thicker
   // ring_freq = (255: 1 ring at a time; 128: 2 rings at a time)
   if (shows[c].isShowStart()) {
     shows[c].turnOffMorphing();
+    freq_storage[c] = random(2, 5);
   }
   CHSV foreColor = led[c].wheel(color);
   led[c].fill(background);
-  uint8_t value = shows[c].getCycle() / ring_speed;
+  uint8_t value = shows[c].getCycle() / freq_storage[c];  // ring_speed;
 
   for (uint8_t y = 0; y < SIZE; y++) {
     for (uint8_t x = 0; x < SIZE; x++) {
@@ -890,42 +918,297 @@ void set_life_coord(uint8_t x, uint8_t y, boolean value, uint8_t hue, uint8_t i)
         } else {
           shows[i].setPixeltoHue(pixel, hue);
         }
-      }
+     }
 }
 
 //// End specialized shows
+
+
+////// Speaking and Hearing
+
+void speak_and_hear() {
+  if (ARE_CONNECTED && IS_SPEAKING) { speak_commands(); }
+  if (ARE_CONNECTED && !IS_SPEAKING) { hear_signal(); }  
+}
+
+void speak_commands() {
+  for (uint8_t i = 0; i < DUAL; i++) {  // Send one channel, then the next
+    speak_channel_commands(i);   // High chatter
+//    if (shows[i].getMorph() == 0) {   // Lower chatter
+//      speak_channel_commands(i);
+//    }
+  }
+}
+
+void speak_channel_commands(uint8_t i) {
+  // Speak all the commands for a particular channel
+  uint8_t m = 0;  // where we are in the send-out message string
+
+  m = speak_start(m);
+  m = speak_channel(i, m);  // Send the channel A or B prompt
+  
+  m = speak_command(COMMAND_SM_CYCLE, shows[CHANNEL_A].getSmallCycle(), m);
+  m = speak_command(COMMAND_FORE, shows[i].getForeColor(), m);
+  m = speak_command(COMMAND_BACK, shows[i].getBackColor(), m);
+  m = speak_command(COMMAND_SHOW, current_show[i], m);
+  m = speak_command(COMMAND_WAIT, shows[i].getWait(), m);
+  m = speak_command(COMMAND_MASK, show_variables[i + 6], m);
+  m = speak_command(COMMAND_P_TYPE, show_variables[i + 8], m);
+  m = speak_command(COMMAND_W_TYPE, show_variables[i + 10], m);
+  
+  message[m++] = COMMAND_PERIOD;  // Terminate message with period character
+  message[m++] = '\0';  // Terminate message with null (new-line) character
+  Serial1.print(message);  // Only done once
+//  Serial.println(message);  // For debugging
+}
+
+void speak_arduinoblue_commands() {
+  uint8_t m = 0;  // where we are in the send-out message string
+
+  m = speak_start(m);
+  m = speak_command(COMMAND_BRIGHTNESS, BRIGHTNESS, m);
+  m = speak_command(COMMAND_PALETTE, hue_start, m);
+  m = speak_command(COMMAND_PAL_WIDTH, hue_width, m);
+  m = speak_command(COMMAND_SPEED, DELAY_TIME, m);
+  m = speak_command(COMMAND_FADE, FADE_TIME, m);
+  m = speak_command(COMMAND_BOLT, curr_lightning, m);
+  
+  message[m++] = COMMAND_PERIOD;  // Terminate message with null character
+  message[m++] = '\0';  // Terminate message with null character
+  Serial1.print(message);  // Only done once
+//  Serial.println(message);  // For debugging
+}
+
+uint8_t speak_start(uint8_t m) {
+  message[m++] = COMMAND_START;
+  return m;
+}
+
+uint8_t speak_command(char cmd, int value, uint8_t m) {
+  message[m++] = cmd;
+
+  String value_str = String(value);
+  for (uint8_t i = 0; i < value_str.length(); i++) {
+    message[m++] = value_str[i];
+  }
+
+  message[m++] = COMMAND_COMMA;
+  return m;
+}
+
+uint8_t speak_channel(int i, uint8_t m) {
+  char command_channel = (i == 0) ? COMMAND_CHANNEL_A : COMMAND_CHANNEL_B ;
+  message[m++] = command_channel;
+  return m;
+}
+
+////// Hearing
+
+void hear_signal() {
+  if (Serial1.available()) {  // Heard a signal!
+    ResetLostCounter();    
+    boolean msg_received = GetMessage(message);  // Load global message buffer by pointer
+    if (msg_received) {
+      Serial.println(message);  // For debugging
+      ProcessMessage(message);
+    }
+  } else {
+    if (!is_lost && (millis() - last_connection > MAX_SILENT_TIME) ) {
+      is_lost = true;
+    }
+  }
+}
+
+//
+// ResetLostCounter - board is not lost
+//
+void ResetLostCounter() {
+  is_lost = false;
+  last_connection = millis();
+}
+
+//
+// GetMessage - pulls the whole serial buffer until a period
+//
+boolean GetMessage(char* message) {
+  char tmp;
+  boolean have_start_signal = false;
+  uint8_t tries = 0;
+  uint16_t MAX_TRIES = 2000;
+  uint8_t i = 0;
+
+  while (tries++ < MAX_TRIES) {
+    if (Serial1.available()) {
+      tries = 0;
+      tmp = Serial1.read();
+//      Serial.print(tmp);  // For debugging
+
+      if (!have_start_signal) {
+        if (tmp == COMMAND_START) { have_start_signal = true; }  // Start of message
+        else { } // discard prefix garbage
+      } else {
+        if (tmp == COMMAND_PERIOD) {
+          message[i++] = tmp;  // End of message
+          message[i++] = '\0';  // End of string
+          return true;
+        }  
+        if (isAscii(tmp)) {
+          message[i++] = tmp;
+          if (i >= MAX_MESSAGE) {
+            Serial.println("Message too long!");  // Ran out of message space
+            return false;
+          }
+        }
+      }
+    }
+  }
+  Serial.println("Ran out of tries");
+  return false;  // discard message
+}
+
+//
+// ProcessMessage
+//
+void ProcessMessage(char* message) {
+  uint8_t i = 0;
+  uint8_t channel = 0;  // Default to channel 0
+  char cmd;
+  
+  while (i < MAX_MESSAGE) {
+    
+    cmd = message[i];  // Get one-letter command
+
+    if (cmd == COMMAND_PERIOD) {
+      return;
+    } else if (!isAscii(cmd)) {
+      return;
+    } else if (cmd == COMMAND_CHANNEL_A) {
+      i++;
+      channel = 0;
+    } else if (cmd == COMMAND_CHANNEL_B) {
+      i++;
+      channel = 1;
+    } else if (isAlpha(cmd)) {
+      for (uint8_t j = 0; j < MAX_NUM; j++) { 
+        number_buffer[j] = EMPTY_CHAR;  // Clear number buffer
+      }
+      
+      int numsiz = ReadNum(message, i+1, number_buffer);  // Read in the number
+      i = i + 2 + numsiz; // 2 = leap beginning command and trailing comma
+      
+      ExecuteOrder(cmd, atoi(number_buffer), channel);
+    } else {
+      return;  // Garbage
+    }
+  }
+}
+
+//
+// ReadNum - reads numbers in a string
+//
+uint8_t ReadNum(char* msg, uint8_t place, char* number) {
+  uint8_t i = 0; // Start of number
+  char tmp;
+  
+  while (i < MAX_NUM) {
+    tmp = msg[place];
+    if (tmp == COMMAND_COMMA) {
+      return (i);
+    } else {
+      number[i] = msg[place];
+      i++;
+      place++;
+      if (place >= MAX_MESSAGE) { 
+        break;  
+      }
+    }
+  }
+  Serial.println("Number too long");
+  return (0); // Number too long
+}
+
+//
+// Execute Order - execute a letter command followed by a number
+//
+void ExecuteOrder(char command, uint16_t value, uint8_t i) {
+      
+  switch (command) {
+    
+    case COMMAND_FORE:
+      shows[i].setForeColor(value);
+      break;
+    
+    case COMMAND_BACK:
+      shows[i].setBackColor(value);
+      break;
+
+    case COMMAND_BRIGHTNESS:
+      if (BRIGHTNESS != value) {
+        BRIGHTNESS = value;
+        FastLED.setBrightness( BRIGHTNESS );
+      }
+      break;
+    
+    case COMMAND_WAIT:
+      if (shows[i].getWait() != value) { 
+        shows[i].setWait(value);
+      }
+      break;
+    
+    case COMMAND_SHOW:  // Show
+      if (current_show[i] != value) {
+        current_show[i] = value % NUM_SHOWS;
+        next_show(i);
+      }
+      break;
+
+    case COMMAND_MASK:
+      show_variables[i + 6] = value;
+      break;
+
+    case COMMAND_P_TYPE:
+      show_variables[i + 8] = value;
+      break;
+
+    case COMMAND_W_TYPE:
+      show_variables[i + 10] = value;
+      break;
+
+    case COMMAND_SM_CYCLE: // small_cycle
+      shows[i].setSmallCycle(value);
+      break;
+  }
+}
+
+////// End Speaking & Hearing
+
 
 //
 // morph_channels - morph together the 2 chanels and update the LEDs
 //
 void morph_channels(uint8_t fract) {
-  uint8_t led_number;
-
   mirror_pixels(CHANNEL_A);
   mirror_pixels(CHANNEL_B);
   
   for (int i = 0; i < NUM_LEDS; i++) {
-    led_number = convert_pixel_to_led(i);
-    if (led_number != XX) {
-      CHSV color_b = mask(led[CHANNEL_B].getInterpFrameColor(rotate_pixel(i, CHANNEL_B)), i, CHANNEL_B);
-      CHSV color_a = mask(led[CHANNEL_A].getInterpFrameColor(rotate_pixel(i, CHANNEL_A)), i, CHANNEL_A);
-      CHSV color = led[CHANNEL_A].getInterpHSV(color_b, color_a, fract);  // interpolate a + b channels
-      color = lightning(narrow_palette(color));  // (ArduinoBlue)
-      if (SMOOTHING > 0) {
-        color = led[CHANNEL_A].smooth_color(led_buffer[led_number], color, SMOOTHING);  // smoothing
-      }
-      leds[led_number] = color;
-      led_buffer[led_number] = color;
+    CHSV color_b = mask(led[CHANNEL_B].getInterpFrameColor(rotate_pixel(i, CHANNEL_B)), i, CHANNEL_B);
+    CHSV color_a = mask(led[CHANNEL_A].getInterpFrameColor(rotate_pixel(i, CHANNEL_A)), i, CHANNEL_A);
+    CHSV color = led[CHANNEL_A].getInterpHSV(color_b, color_a, fract);  // interpolate a + b channels
+
+    if (SMOOTHING > 0) {  // Smoothing
+      color = led[CHANNEL_A].smooth_color(led_buffer[i], color, SMOOTHING);  // smoothing
     }
+    led_buffer[i] = color;
+    leds[convert_pixel_to_led(i)] = narrow_palette(color);  // Send color to the actual LED
   }
-  turn_off_spacer_leds();
+  turn_off_spacer_leds();  // Try removing this?
 }
 
 //
 // mask
 //
 CHSV mask(CHSV color, uint8_t i, uint8_t channel) {
-  if (show_variables[channel + 6] == 0 || current_show[i] == 0) {  // ToDo: Check this
+  if (show_variables[channel + 6] == 0 || current_show[i] == 0) {
     return color;  // no masking
   }
   uint8_t mask_value = show_variables[channel + 6] - 1;
@@ -944,10 +1227,7 @@ CHSV mask(CHSV color, uint8_t i, uint8_t channel) {
 // convert pixel to led: account for the spacer pixels
 //
 uint8_t convert_pixel_to_led(uint8_t i) {
-  if (i == XX) {
-    return XX;
-  }
-  uint8_t LED_LOOKUP[] = {
+  const uint8_t LED_LOOKUP[] = {
      0,  2,  5,  6,  9, 10, 13, 14, 17, 18, 21, 22,
      1,  3,  4,  7,  8, 11, 12, 15, 16, 19, 20, 23,
     50, 47, 46, 43, 42, 39, 38, 35, 34, 31, 30, 28,
@@ -967,10 +1247,30 @@ uint8_t convert_pixel_to_led(uint8_t i) {
 //
 // mirror_pixels
 //
-void mirror_pixels(uint8_t channel) {
+void mirror_pixels(uint8_t channel) {  
   uint8_t symmetry = show_variables[4 + channel];
   
   if (symmetry == 1 || symmetry == 3) {  // Horizontal mirroring
+    for (uint8_t y = 0 ; y < SIZE; y++) {
+      for (uint8_t x = 0 ; x < SIZE; x++) {
+        if (y >= SIZE / 2) {
+          led[channel].setInterpFrame(get_pixel_from_coord(x, SIZE - y - 1), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
+        }
+      }
+    }
+  }
+  
+  if (symmetry == 2 || symmetry == 3) {  // Vertical mirroring
+    for (uint8_t y = 0 ; y < SIZE; y++) {
+      for (uint8_t x = 0 ; x < SIZE; x++) {
+        if (x >= SIZE / 2) {
+          led[channel].setInterpFrame(get_pixel_from_coord(SIZE - x - 1, y), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
+        }
+      }
+    }
+  }
+
+  if (symmetry == 4 || symmetry == 6) {  // Diagonal 1 mirroring
     for (uint8_t y = 0 ; y < SIZE; y++) {
       for (uint8_t x = 0 ; x < SIZE; x++) {
         if (x > y) {
@@ -980,13 +1280,11 @@ void mirror_pixels(uint8_t channel) {
     }
   }
   
-  if (symmetry == 2 || symmetry == 3) {  // Vertical mirroring
+  if (symmetry == 5 || symmetry == 6) {  // Diagonal 2 mirroring
     for (uint8_t y = 0 ; y < SIZE; y++) {
       for (uint8_t x = 0 ; x < SIZE; x++) {
         if (x + y < SIZE - 1) {
-          uint8_t new_y = SIZE - x - 1;
-          uint8_t new_x = x - y + new_y;
-          led[channel].setInterpFrame(get_pixel_from_coord(new_x, new_y), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
+          led[channel].setInterpFrame(get_pixel_from_coord(SIZE - y - 1, SIZE - x - 1), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
         }
       }
     }
@@ -994,18 +1292,19 @@ void mirror_pixels(uint8_t channel) {
 }
 
 //
-// rotate_pixel
+// rotate_pixel - rotate square grid 90-degrees for each "r"
 //
 uint8_t rotate_pixel(uint8_t i, uint8_t channel) {
+  uint8_t new_x, new_y;
   uint8_t x = i % SIZE;
   uint8_t y = i / SIZE;
-  uint8_t rotation = show_variables[2 + channel];  // Very strange memory bug here
+  uint8_t rotation = show_variables[2 + channel];
 
-  if (rotation > 1) {
-    y = SIZE - y - 1;
-  }
-  if (rotation == 1 || rotation == 2) {
-    x = SIZE - x - 1;
+  for (uint8_t r = rotation; r > 0; r--) {
+    new_x = SIZE - y - 1;
+    new_y = x;
+    x = new_x;
+    y = new_y;
   }
 
   return ((y * SIZE) + x) % NUM_LEDS;
@@ -1015,9 +1314,7 @@ uint8_t rotate_pixel(uint8_t i, uint8_t channel) {
 // turn off spacer leds - blacken the 16 space pixels
 //
 void turn_off_spacer_leds() {
-  uint8_t spacer_leds[] = { 
-    24, 25, 26, 51, 52, 53, 78, 79, 80, 105, 106, 107, 132, 133, 134
-  };
+  const uint8_t spacer_leds[] = { 24, 25, 26, 51, 52, 53, 78, 79, 80, 105, 106, 107, 132, 133, 134 };
   for (uint8_t i = 0; i < NUMBER_SPACER_LEDS; i++) {
     leds[spacer_leds[i]] = CRGB(0, 0, 0);
   }
@@ -1032,7 +1329,6 @@ uint8_t get_intensity(uint8_t i) {
   uint8_t intensity;  // 0 = Off, 255 = full On
   uint16_t small_cycle = shows[i].getSmallCycle();
 
-  // Similar logic to check_fades (deprecated)
   if (small_cycle < FADE_CYCLES) {
     intensity = map(small_cycle, 0, FADE_CYCLES, 0, 255);  // rise
   } else if (small_cycle <= (MAX_SMALL_CYCLE / 2)) {
@@ -1051,7 +1347,7 @@ uint8_t get_intensity(uint8_t i) {
 // narrow_palette - confine the color range (ArduinoBlue)
 //
 CHSV narrow_palette(CHSV color) {
-  color.h = map8(color.h, hue_start, (hue_start + hue_width) % MAX_COLOR );
+  color.h = map8(sin8(color.h), hue_start, (hue_start + hue_width) % MAX_COLOR );
   return color;
 }
 
@@ -1059,76 +1355,76 @@ CHSV narrow_palette(CHSV color) {
 // lightning - ramp all pixels quickly up to white (down sat & up value) and back down
 //
 CHSV lightning(CHSV color) {  // (ArduinoBlue)
-//  if (curr_lightning > 0) {
-//    uint8_t increase = 255 - cos8( map(curr_lightning, 0, BOLT_TIME, 0, 255));
-//    color.s -= increase;
-//    color.v += increase;
-//  }
+  if (curr_lightning > 0) {
+    uint8_t increase = 255 - cos8( map(curr_lightning, 0, BOLT_TIME, 0, 255));
+    color.s -= increase;
+    color.v += increase;
+  }
   return color;
 }
 
 //
 // check_phone - poll the phone for updated values  (ArduinoBlue)
 //
-void check_phone() {
-  int8_t sliderId = phone.getSliderId();  // ID of the slider moved
-  int8_t buttonId = phone.getButton();  // ID of the button
-
-  if (sliderId != -1) {
-    int16_t sliderVal = phone.getSliderVal();  // Slider value goes from 0 to 200
-    sliderVal = map(sliderVal, 0, 200, 0, 255);  // Recast to 0-255
-
-    switch (sliderId) {
-      case BRIGHTNESS_SLIDER:
-        BRIGHTNESS = sliderVal;
-        FastLED.setBrightness( BRIGHTNESS );
-        break;
-      case HUE_SLIDER:
-        hue_start = sliderVal;
-        break;
-      case HUE_WIDTH_SLIDER:
-        hue_width = sliderVal;
-        break;
-      case SPEED_SLIDER:
-        DELAY_TIME = map8(sliderVal, 10, 100);
-        break;
-      case FADE_TIME_SLIDER:
-        FADE_TIME = map8(sliderVal, 0, SHOW_DURATION);
-        break;
-    }
-  }
-  
-  if (buttonId == BAM_BUTTON) { curr_lightning = BOLT_TIME; }
-}
+//void check_phone() {
+//  int8_t sliderId = phone.getSliderId();  // ID of the slider moved
+//  int8_t buttonId = phone.getButton();  // ID of the button
+//
+//  if (sliderId != -1) {
+//    int16_t sliderVal = phone.getSliderVal();  // Slider value goes from 0 to 200
+//    sliderVal = map(sliderVal, 0, 200, 0, 255);  // Recast to 0-255
+//
+//    switch (sliderId) {
+//      case BRIGHTNESS_SLIDER:
+//        BRIGHTNESS = sliderVal;
+//        FastLED.setBrightness( BRIGHTNESS );
+//        break;
+//      case HUE_SLIDER:
+//        hue_start = sliderVal;
+//        break;
+//      case HUE_WIDTH_SLIDER:
+//        hue_width = sliderVal;
+//        break;
+//      case SPEED_SLIDER:
+//        DELAY_TIME = map8(sliderVal, 10, 100);
+//        break;
+//      case FADE_TIME_SLIDER:
+//        FADE_TIME = map8(sliderVal, 0, SHOW_DURATION);
+//        break;
+//    }
+//  }
+//  
+//  if (buttonId == BAM_BUTTON) { curr_lightning = BOLT_TIME; }
+//}
 
 //
 // Unpack hex into bits
 //
 boolean get_bit_from_pattern_number(uint8_t n, uint8_t pattern_number) {
-  uint8_t PatternMatrix[] = {
+  const uint8_t PatternMatrix[] = {
     0xc0, 0xc, 0x0, 0x30, 0x3, 0x0, 0xc, 0x0, 0xc0, 0x3, 0x0, 0x30, 0x0, 0xc0, 0xc, 0x0, 0x30, 0x3,
-  0xc0, 0xc, 0x6, 0x30, 0x63, 0x18, 0xd, 0x80, 0xc0, 0x3, 0x1, 0xb0, 0x18, 0xc6, 0xc, 0x60, 0x30, 0x3,
-  0xf, 0x0, 0xf0, 0xf, 0x0, 0xf0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf, 0x0, 0xf0, 0xf, 0x0, 0xf0,
-  0x99, 0x96, 0x66, 0x66, 0x69, 0x99, 0x99, 0x96, 0x66, 0x66, 0x69, 0x99, 0x19, 0x96, 0x66, 0x66, 0x69, 0x99,
-  0x0, 0x6, 0x0, 0x60, 0xc1, 0x8c, 0x18, 0x0, 0x60, 0x6, 0x0, 0x18, 0x31, 0x83, 0x6, 0x0, 0x60, 0x0,
-  0x0, 0x0, 0x60, 0x39, 0x3, 0x8, 0x20, 0x44, 0x62, 0x46, 0x22, 0x4, 0x10, 0xc0, 0x9c, 0x6, 0x0, 0x0,
-  0x6, 0x0, 0x60, 0x0, 0xc, 0x3, 0xc0, 0x33, 0x4c, 0x32, 0xcc, 0x3, 0xc0, 0x30, 0x0, 0x6, 0x0, 0x60,
-  0x55, 0x5a, 0xaa, 0x55, 0x5a, 0xaa, 0x55, 0x5a, 0xaa, 0x55, 0x5a, 0xaa, 0x55, 0x5a, 0xaa, 0x55, 0x5a, 0xaa,
-  0xe3, 0x8e, 0x38, 0xe3, 0x81, 0xc7, 0x1c, 0x71, 0xc7, 0xe3, 0x8e, 0x38, 0xe3, 0x81, 0xc7, 0x1c, 0x71, 0xc7,
-  0x30, 0xc3, 0xc, 0xf0, 0xff, 0xf, 0x8, 0x0, 0x60, 0x6, 0x0, 0x10, 0xf0, 0xff, 0xf, 0x30, 0xc3, 0xc,
-  0x40, 0x8c, 0x66, 0x26, 0x61, 0x81, 0x18, 0x6, 0x6, 0x60, 0x60, 0x18, 0x81, 0x86, 0x64, 0x66, 0x31, 0x2,
-  0x20, 0x63, 0x7, 0xc0, 0x74, 0x60, 0x6, 0x1, 0xf8, 0x1f, 0x80, 0x60, 0x6, 0x2e, 0x3, 0xe0, 0xc6, 0x4,
-  0x20, 0x63, 0x9, 0xc0, 0x94, 0xc6, 0x4, 0x0, 0x40, 0x4, 0x0, 0x40, 0x66, 0x29, 0x3, 0x90, 0xc6, 0x4,
-  0x0, 0x0, 0x0, 0x0, 0xc0, 0xc, 0xf, 0x0, 0x90, 0x9, 0x0, 0xf0, 0x30, 0x3, 0x0, 0x0, 0x0, 0x0,
-  0x60, 0x7e, 0x9, 0xe0, 0x91, 0xce, 0x18, 0x1, 0x0, 0x0, 0x80, 0x18, 0x73, 0x89, 0x7, 0x90, 0x7e, 0x6,
-  0x1, 0x81, 0x98, 0x18, 0x0, 0x0, 0x60, 0x66, 0x6, 0x0, 0x0, 0x60, 0x6, 0x0, 0x0, 0x1, 0x80, 0x18,
-  0x20, 0x62, 0x19, 0xe1, 0x90, 0x6, 0x3, 0x60, 0x30, 0xc, 0x6, 0xc0, 0x60, 0x9, 0x87, 0x98, 0x46, 0x4,
-  0x19, 0x87, 0x90, 0x78, 0x2e, 0x3, 0xec, 0x0, 0xc0, 0x3, 0x0, 0x37, 0xc0, 0x74, 0x1e, 0x9, 0xe1, 0x98,
-  0x1, 0x81, 0x88, 0x8, 0x0, 0xc, 0x60, 0x42, 0x0, 0x0, 0x0, 0xc0, 0xc4, 0x4, 0x18, 0x8, 0x81, 0x80,
-  0x24, 0x94, 0x92, 0x92, 0x42, 0x49, 0x49, 0x29, 0x24, 0x24, 0x94, 0x92, 0x92, 0x42, 0x49, 0x49, 0x29, 0x24,
-  0x0, 0x6, 0x0, 0x60, 0x0, 0x78, 0x4, 0x81, 0xc8, 0x13, 0x81, 0x20, 0x1e, 0x0, 0x6, 0x0, 0x60, 0x0
+    0xc0, 0xc, 0x6, 0x30, 0x63, 0x18, 0xd, 0x80, 0xc0, 0x3, 0x1, 0xb0, 0x18, 0xc6, 0xc, 0x60, 0x30, 0x3,
+    0xf, 0x0, 0xf0, 0xf, 0x0, 0xf0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf, 0x0, 0xf0, 0xf, 0x0, 0xf0,
+    0x99, 0x96, 0x66, 0x66, 0x69, 0x99, 0x99, 0x96, 0x66, 0x66, 0x69, 0x99, 0x19, 0x96, 0x66, 0x66, 0x69, 0x99,
+    0x0, 0x6, 0x0, 0x60, 0xc1, 0x8c, 0x18, 0x0, 0x60, 0x6, 0x0, 0x18, 0x31, 0x83, 0x6, 0x0, 0x60, 0x0,
+    0x0, 0x0, 0x60, 0x39, 0x3, 0x8, 0x20, 0x44, 0x62, 0x46, 0x22, 0x4, 0x10, 0xc0, 0x9c, 0x6, 0x0, 0x0,
+    0x6, 0x0, 0x60, 0x0, 0xc, 0x3, 0xc0, 0x33, 0x4c, 0x32, 0xcc, 0x3, 0xc0, 0x30, 0x0, 0x6, 0x0, 0x60,
+    0x55, 0x5a, 0xaa, 0x55, 0x5a, 0xaa, 0x55, 0x5a, 0xaa, 0x55, 0x5a, 0xaa, 0x55, 0x5a, 0xaa, 0x55, 0x5a, 0xaa,
+    0xe3, 0x8e, 0x38, 0xe3, 0x81, 0xc7, 0x1c, 0x71, 0xc7, 0xe3, 0x8e, 0x38, 0xe3, 0x81, 0xc7, 0x1c, 0x71, 0xc7,
+    0x30, 0xc3, 0xc, 0xf0, 0xff, 0xf, 0x8, 0x0, 0x60, 0x6, 0x0, 0x10, 0xf0, 0xff, 0xf, 0x30, 0xc3, 0xc,
+    0x40, 0x8c, 0x66, 0x26, 0x61, 0x81, 0x18, 0x6, 0x6, 0x60, 0x60, 0x18, 0x81, 0x86, 0x64, 0x66, 0x31, 0x2,
+    0x20, 0x63, 0x7, 0xc0, 0x74, 0x60, 0x6, 0x1, 0xf8, 0x1f, 0x80, 0x60, 0x6, 0x2e, 0x3, 0xe0, 0xc6, 0x4,
+    0x20, 0x63, 0x9, 0xc0, 0x94, 0xc6, 0x4, 0x0, 0x40, 0x4, 0x0, 0x40, 0x66, 0x29, 0x3, 0x90, 0xc6, 0x4,
+    0x0, 0x0, 0x0, 0x0, 0xc0, 0xc, 0xf, 0x0, 0x90, 0x9, 0x0, 0xf0, 0x30, 0x3, 0x0, 0x0, 0x0, 0x0,
+    0x60, 0x7e, 0x9, 0xe0, 0x91, 0xce, 0x18, 0x1, 0x0, 0x0, 0x80, 0x18, 0x73, 0x89, 0x7, 0x90, 0x7e, 0x6,
+    0x1, 0x81, 0x98, 0x18, 0x0, 0x0, 0x60, 0x66, 0x6, 0x0, 0x0, 0x60, 0x6, 0x0, 0x0, 0x1, 0x80, 0x18,
+    0x20, 0x62, 0x19, 0xe1, 0x90, 0x6, 0x3, 0x60, 0x30, 0xc, 0x6, 0xc0, 0x60, 0x9, 0x87, 0x98, 0x46, 0x4,
+    0x19, 0x87, 0x90, 0x78, 0x2e, 0x3, 0xec, 0x0, 0xc0, 0x3, 0x0, 0x37, 0xc0, 0x74, 0x1e, 0x9, 0xe1, 0x98,
+    0x1, 0x81, 0x88, 0x8, 0x0, 0xc, 0x60, 0x42, 0x0, 0x0, 0x0, 0xc0, 0xc4, 0x4, 0x18, 0x8, 0x81, 0x80,
+    0x24, 0x94, 0x92, 0x92, 0x42, 0x49, 0x49, 0x29, 0x24, 0x24, 0x94, 0x92, 0x92, 0x42, 0x49, 0x49, 0x29, 0x24,
+    0x0, 0x6, 0x0, 0x60, 0x0, 0x78, 0x4, 0x81, 0xc8, 0x13, 0x81, 0x20, 0x1e, 0x0, 0x6, 0x0, 0x60, 0x0
   };
-  
+  pattern_number = pattern_number % NUM_PATTERNS;
   uint8_t pattern_byte = PatternMatrix[(pattern_number * 18) + (n / 8)];
   return (pattern_byte & (1 << (7 - (n % 8)) ));
 }

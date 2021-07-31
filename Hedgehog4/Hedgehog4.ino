@@ -12,7 +12,7 @@
 //
 // 2 pins for clock and data of lights. Reversed from usual!
 // 
-#define dataPin 9       // 'yellow' wire
+#define dataPin 7       // 'yellow' wire
 #define clockPin 8      // 'green' wire
 
 #define numLights 50      // number of spikes

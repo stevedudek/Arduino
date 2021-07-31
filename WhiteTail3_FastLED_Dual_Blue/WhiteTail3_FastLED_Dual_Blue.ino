@@ -1,9 +1,11 @@
 #include <FastLED.h>
 #include <Led.h>
 #include <Shows.h>
-
+#include <ArduinoBlue.h>  // (ArduinoBlue)
 //
 //  Linear Lights with FastLED
+//
+//  ArduinoBlue wireless bluetooth controller (ArduinoBlue)
 //
 //  Dual shows - Blend together 2 shows running at once
 //
@@ -12,16 +14,16 @@
 //
 //  Removed: Noise, palettes, 2D shows (need to do this on Show repository)
 //
-//  3/16/2019
+//  4/25/19
 //
-#define NUM_LEDS 69  // Chance of memory shortage for large NUM_LEDS
-#define TOTAL_LEDS  (NUM_LEDS * 2)  // Symmetric
+#define NUM_LEDS 13  // Chance of memory shortage for large NUM_LEDS
 
-#define BRIGHTNESS  255 // (0-255)
+uint8_t BRIGHTNESS = 255;  // (0-255) (ArduinoBlue)
 
-#define DELAY_TIME 40  // in milliseconds. FastLED demo has 8.3 ms delay!
+uint8_t DELAY_TIME = 30;  // in milliseconds (ArduinoBlue)
 
-#define DATA_PIN 7
+#define DATA_PIN 9
+#define CLOCK_PIN 8
 
 #define CHANNEL_A  0  // Don't change these
 #define CHANNEL_B  1
@@ -30,19 +32,34 @@
 Led led[] = { Led(NUM_LEDS), Led(NUM_LEDS) };  // Class instantiation of the 2 Led libraries
 Shows shows[] = { Shows(&led[CHANNEL_A]), Shows(&led[CHANNEL_B]) };  // 2 Show libraries
 CHSV leds_buffer[DUAL][NUM_LEDS];  // CHSV buffers for Channel A + B; may break the memory bank
-CRGB leds[TOTAL_LEDS];  // Hook for FastLED library
+CRGB leds[NUM_LEDS];  // Hook for FastLED library
+
+#define ONLY_RED true  // (ArduinoBlue)
+uint8_t hue_start = 0;
+uint8_t hue_width = 255;
+uint8_t curr_lightning = 0;
 
 // Shows
-#define START_SHOW_CHANNEL_A  3  // Channels A starting show
+#define START_SHOW_CHANNEL_A  0  // Channels A starting show
 #define START_SHOW_CHANNEL_B  1  // Channels B starting show
 uint8_t current_show[] = { START_SHOW_CHANNEL_A, START_SHOW_CHANNEL_B };
 #define NUM_SHOWS 12
 
 // Clocks and time
 #define SHOW_DURATION 30  // seconds
-#define FADE_TIME 3   // seconds to fade in. If FADE_TIME = SHOW_DURATION, then Always Be Fading
+uint8_t FADE_TIME = 20;  // seconds to fade in + out (Arduino Blue)
 uint32_t MAX_SMALL_CYCLE = SHOW_DURATION * 2 * (1000 / DELAY_TIME);  // *2! 50% = all on, 50% = all off, and rise + decay on edges
 #define FADE_CYCLES  (FADE_TIME * 1000 / DELAY_TIME)  // cycles to fade in + out
+
+// ArduinoBlue
+ArduinoBlue phone(Serial2); // Blue Tx = pin 9; Blue Rx = pin 10
+#define HUE_SLIDER        0
+#define HUE_WIDTH_SLIDER  1
+#define SPEED_SLIDER      2
+#define BRIGHTNESS_SLIDER 3
+#define FADE_TIME_SLIDER  4
+#define BAM_BUTTON        0
+#define BOLT_TIME        20
 
 //
 // Setup
@@ -55,8 +72,9 @@ void setup() {
   
   Serial.begin(9600);
   Serial.println("Start");
+  Serial2.begin(9600);  // Serial2: Bluetooth serial (ArduinoBlue)
 
-  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, TOTAL_LEDS);  // Only 1 leds object
+  FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);  // Only 1 leds object
   FastLED.setBrightness( BRIGHTNESS );
 
   // Set up the various mappings here (1D lists in PROGMEM)
@@ -70,6 +88,11 @@ void setup() {
   for (uint8_t i = 0; i < DUAL; i++) {
     led[i].fillBlack();
     led[i].push_frame();
+  }
+
+  if (ONLY_RED) {  // (ArduinoBlue)
+    hue_start = 192;
+    hue_width = 124;
   }
 }
 
@@ -123,6 +146,7 @@ void loop() {
     }
   }
 
+  check_phone();  // Check the phone settings (ArduinoBlue)
   update_leds();  // morph together the 2 chanels & push the interp_frame on to the leds
   morph_channels(get_intensity(CHANNEL_A));  // morph together the 2 leds channels and deposit on to Channel_A
   FastLED.show();  // Update the display
@@ -140,6 +164,10 @@ void advance_clocks() {
     if (shows[i].getSmallCycle() >= MAX_SMALL_CYCLE) { 
       next_show(i); 
     }
+  }
+  
+  if (curr_lightning > 0 ) {  // (ArduinoBlue)
+    curr_lightning--; // Reduce the current bolt
   }
 }
 
@@ -172,30 +200,14 @@ void update_leds() {
 // morph_channels - morph together the 2 chanels and update the LEDs
 //
 void morph_channels(uint8_t fract) {
+  CHSV color;  // (ArduinoBlue)
+  
   for (int i = 0; i < NUM_LEDS; i++) {
-    CHSV color = led[CHANNEL_A].getInterpHSV(leds_buffer[CHANNEL_B][i], 
-                                             leds_buffer[CHANNEL_A][i], 
-                                             fract);  // interpolate a + b channels
-    leds[lookup_led(i)] = color;
-    leds[get_paired_led(i)] = color;
+    color = led[CHANNEL_A].getInterpHSV(leds_buffer[CHANNEL_B][i], 
+                                        leds_buffer[CHANNEL_A][i], 
+                                        fract);  // interpolate a + b channels
+    leds[i] = lightning(narrow_palette(color));  // (ArduinoBlue)
   }
-}
-
-//
-// lookup_led
-//
-uint8_t lookup_led(uint8_t i) {
-  if (i <= 47) return i;
-  else return i + 20;
-}
-
-//
-// get_paired_led
-//
-uint8_t get_paired_led(uint8_t i) {
-  if (i <= 27) return 135 - (i - 0); // map(i, 0, 27, 135, 108);
-  else if (i <= 47) return 67 - (i - 28); //map(i, 28, 47, 67, 48);
-  else return 107 - (i - 48); // map(i, 48, 67, 108, 88);
 }
 
 //
@@ -217,3 +229,61 @@ uint8_t get_intensity(uint8_t i) {
   }
   return intensity;
 }
+
+//// End DUAL SHOW LOGIC
+
+//
+// narrow_palette - confine the color range (ArduinoBlue)
+//
+CHSV narrow_palette(CHSV color) {
+  color.h = map8(color.h, hue_start, (hue_start + hue_width) % 256 );
+  return color;
+}
+
+//
+// lightning - ramp all pixels quickly up to white (down sat & up value) and back down
+//
+CHSV lightning(CHSV color) {  // (ArduinoBlue)
+  if (curr_lightning > 0) {
+    uint8_t increase = 255 - cos8( map(curr_lightning, 0, BOLT_TIME, 0, 255));
+    color.s -= increase;
+    color.v += increase;
+  }
+  return color;
+}
+
+//
+// check_phone - poll the phone for updated values  (ArduinoBlue)
+//
+void check_phone() {
+  int8_t sliderId = phone.getSliderId();  // ID of the slider moved
+  int8_t buttonId = phone.getButton();  // ID of the button
+
+  if (sliderId != -1) {
+    int16_t sliderVal = phone.getSliderVal();  // Slider value goes from 0 to 200
+    sliderVal = map(sliderVal, 0, 200, 0, 255);  // Recast to 0-255
+
+    switch (sliderId) {
+      case BRIGHTNESS_SLIDER:
+        BRIGHTNESS = sliderVal;
+        FastLED.setBrightness( BRIGHTNESS );
+        break;
+      case HUE_SLIDER:
+        hue_start = sliderVal;
+        break;
+      case HUE_WIDTH_SLIDER:
+        hue_width = sliderVal;
+        break;
+      case SPEED_SLIDER:
+        DELAY_TIME = map8(sliderVal, 10, 100);
+        break;
+      case FADE_TIME_SLIDER:
+        FADE_TIME = map8(sliderVal, 0, SHOW_DURATION);
+        break;
+    }
+  }
+  
+  if (buttonId == BAM_BUTTON) { curr_lightning = BOLT_TIME; }
+}
+
+

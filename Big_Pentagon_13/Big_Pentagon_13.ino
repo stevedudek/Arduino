@@ -447,17 +447,12 @@ uint8_t pick_random_pattern_type() {
 }
 
 uint8_t pick_random_symmetry() {
-  uint8_t random_symmetry = random(10);
+  uint8_t random_symmetry = random(12);
   
-  if (random_symmetry < 2) {
-    return 3;  // 4-fold
-  } else if (random_symmetry < 4) {
-    return 1;  // Horizontal mirroring
-  } else if (random_symmetry < 6) {
-    return 2;  // Vertical mirroring
-  } else {
-    return 0;  
+  if (random_symmetry <= 6) {
+    return random_symmetry;
   }
+  return 0;  // No symmetrizing
 }
 
 //
@@ -890,7 +885,7 @@ void set_life_coord(uint8_t x, uint8_t y, boolean value, uint8_t hue, uint8_t i)
         } else {
           shows[i].setPixeltoHue(pixel, hue);
         }
-      }
+     }
 }
 
 //// End specialized shows
@@ -910,7 +905,9 @@ void morph_channels(uint8_t fract) {
       CHSV color_b = mask(led[CHANNEL_B].getInterpFrameColor(rotate_pixel(i, CHANNEL_B)), i, CHANNEL_B);
       CHSV color_a = mask(led[CHANNEL_A].getInterpFrameColor(rotate_pixel(i, CHANNEL_A)), i, CHANNEL_A);
       CHSV color = led[CHANNEL_A].getInterpHSV(color_b, color_a, fract);  // interpolate a + b channels
+      
       color = lightning(narrow_palette(color));  // (ArduinoBlue)
+      
       if (SMOOTHING > 0) {
         color = led[CHANNEL_A].smooth_color(led_buffer[led_number], color, SMOOTHING);  // smoothing
       }
@@ -967,10 +964,30 @@ uint8_t convert_pixel_to_led(uint8_t i) {
 //
 // mirror_pixels
 //
-void mirror_pixels(uint8_t channel) {
+void mirror_pixels(uint8_t channel) {  
   uint8_t symmetry = show_variables[4 + channel];
   
   if (symmetry == 1 || symmetry == 3) {  // Horizontal mirroring
+    for (uint8_t y = 0 ; y < SIZE; y++) {
+      for (uint8_t x = 0 ; x < SIZE; x++) {
+        if (y >= SIZE / 2) {
+          led[channel].setInterpFrame(get_pixel_from_coord(x, SIZE - y - 1), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
+        }
+      }
+    }
+  }
+  
+  if (symmetry == 2 || symmetry == 3) {  // Vertical mirroring
+    for (uint8_t y = 0 ; y < SIZE; y++) {
+      for (uint8_t x = 0 ; x < SIZE; x++) {
+        if (x >= SIZE / 2) {
+          led[channel].setInterpFrame(get_pixel_from_coord(SIZE - x - 1, y), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
+        }
+      }
+    }
+  }
+
+  if (symmetry == 4 || symmetry == 6) {  // Diagonal 1 mirroring
     for (uint8_t y = 0 ; y < SIZE; y++) {
       for (uint8_t x = 0 ; x < SIZE; x++) {
         if (x > y) {
@@ -980,12 +997,12 @@ void mirror_pixels(uint8_t channel) {
     }
   }
   
-  if (symmetry == 2 || symmetry == 3) {  // Vertical mirroring
+  if (symmetry == 5 || symmetry == 6) {  // Diagonal 2 mirroring
     for (uint8_t y = 0 ; y < SIZE; y++) {
       for (uint8_t x = 0 ; x < SIZE; x++) {
         if (x + y < SIZE - 1) {
+          uint8_t new_x = SIZE - y - 1;
           uint8_t new_y = SIZE - x - 1;
-          uint8_t new_x = x - y + new_y;
           led[channel].setInterpFrame(get_pixel_from_coord(new_x, new_y), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
         }
       }
@@ -997,15 +1014,16 @@ void mirror_pixels(uint8_t channel) {
 // rotate_pixel
 //
 uint8_t rotate_pixel(uint8_t i, uint8_t channel) {
+  uint8_t new_x, new_y;
   uint8_t x = i % SIZE;
   uint8_t y = i / SIZE;
   uint8_t rotation = show_variables[2 + channel];  // Very strange memory bug here
 
-  if (rotation > 1) {
-    y = SIZE - y - 1;
-  }
-  if (rotation == 1 || rotation == 2) {
-    x = SIZE - x - 1;
+  for (uint8_t r = rotation; r > 0; r--) {
+    new_x = SIZE - y - 1;
+    new_y = x;
+    x = new_x;
+    y = new_y; 
   }
 
   return ((y * SIZE) + x) % NUM_LEDS;

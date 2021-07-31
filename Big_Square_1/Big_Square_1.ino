@@ -3,9 +3,9 @@
 #include <Shows.h>
 #include <ArduinoBlue.h>  // (ArduinoBlue)
 //
-//  Big Pentagon: 12 x 12 = 144 lights in a square/pentagon grid
+//  Big Square: 12 x 12 = 144 lights in a square grid
 //
-//  9/21/20
+//  10/23/20
 //
 //  ArduinoBlue wireless bluetooth controller (ArduinoBlue)
 //
@@ -13,6 +13,8 @@
 //
 //  2 CHSV buffers for Channel A + B
 //  interpolate the two buffers on to the CRGB leds
+//
+//  Needs testing
 
 uint8_t BRIGHTNESS = 255;  // (0-255) (ArduinoBlue)
 
@@ -24,8 +26,6 @@ long last_time;
 #define CLOCK_PIN 8
 
 #define NUM_LEDS 144
-#define NUMBER_SPACER_LEDS 15
-#define TOTAL_LEDS  (NUM_LEDS + NUMBER_SPACER_LEDS)
 
 #define CHANNEL_A  0  // Don't change these
 #define CHANNEL_B  1
@@ -41,7 +41,7 @@ long last_time;
 Led led[] = { Led(NUM_LEDS), Led(NUM_LEDS) };  // Class instantiation of the 2 Led libraries
 Shows shows[] = { Shows(&led[CHANNEL_A]), Shows(&led[CHANNEL_B]) };  // 2 Show libraries
 CRGB leds[NUM_LEDS];  // The Leds themselves
-CHSV led_buffer[TOTAL_LEDS];  // For smoothing
+CHSV led_buffer[NUM_LEDS];  // For smoothing
 
 #define ONLY_RED false  // (ArduinoBlue)
 uint8_t hue_start = 0;
@@ -58,8 +58,8 @@ uint8_t current_show[] = { START_SHOW_CHANNEL_A, START_SHOW_CHANNEL_B };
 uint8_t show_variables[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };  // 2 each: pattern, rotate, symmetry, mask, pattern_type, wipe_type
 
 // wait times
-#define SHOW_DURATION 100  // seconds
-uint8_t FADE_TIME = 50;  // seconds to fade in + out (Arduino Blue)
+#define SHOW_DURATION 120  // seconds
+uint8_t FADE_TIME = 110;  // seconds to fade in + out (Arduino Blue)
 uint32_t MAX_SMALL_CYCLE = SHOW_DURATION * 2 * (1000 / DELAY_TIME);  // *2! 50% = all on, 50% = all off, and rise + decay on edges
 #define FADE_CYCLES  (FADE_TIME * 1000 / DELAY_TIME)  // cycles to fade in + out
 uint8_t freq_storage[] = { 60, 80 };  // variable storage for shows
@@ -71,7 +71,6 @@ uint8_t freq_storage[] = { 60, 80 };  // variable storage for shows
 #define LIFE_OFFSET  ((LIFE_DIMENSION - SIZE) / 2)
 boolean LIFE_BOARD[TOTAL_LIFE];  // Make this a 2-bit compression
 
-#define PENTAGON 5
 #define BALL_HUE 150
 #define BALL_SIZE 30
 
@@ -85,153 +84,153 @@ ArduinoBlue phone(Serial2); // Blue Tx = pin 9; Blue Rx = pin 10
 #define BAM_BUTTON        0
 #define BOLT_TIME        20
 
-// Lookup tables
+// Lookup tables - Check this with Jupyter Notebook "square_neighbors"
 
 uint8_t neighbors[] PROGMEM = {
-  12, 1, XX, XX, XX,
-  13, 2, XX, 0, 12,
-  14, 3, XX, XX, 1,
-  15, 4, XX, 2, 14,
-  16, 5, XX, XX, 3,
-  17, 6, XX, 4, 16,
-  18, 7, XX, XX, 5,
-  19, 8, XX, 6, 18,
-  20, 9, XX, XX, 7,
-  21, 10, XX, 8, 20,
-  22, 11, XX, XX, 9,
-  23, XX, XX, 10, 22,
-  24, 13, 1, 0, XX,
-  25, 26, 14, 1, 12,
-  26, 15, 3, 2, 13,
-  27, 28, 16, 3, 14,
-  28, 17, 5, 4, 15,
-  29, 30, 18, 5, 16,
-  30, 19, 7, 6, 17,
-  31, 32, 20, 7, 18,
-  32, 21, 9, 8, 19,
-  33, 34, 22, 9, 20,
-  34, 23, 11, 10, 21,
-  35, XX, XX, 11, 22,
-  36, 25, 12, XX, XX,
-  37, 26, 13, 24, 36,
-  38, 27, 14, 13, 25,
-  39, 28, 15, 26, 38,
-  40, 29, 16, 15, 27,
-  41, 30, 17, 28, 40,
-  42, 31, 18, 17, 29,
-  43, 32, 19, 30, 42,
-  44, 33, 20, 19, 31,
-  45, 34, 21, 32, 44,
-  46, 35, 22, 21, 33,
-  47, XX, 23, 34, 46,
-  48, 37, 25, 24, XX,
-  49, 50, 38, 25, 36,
-  50, 39, 27, 26, 37,
-  51, 52, 40, 27, 38,
-  52, 41, 29, 28, 39,
-  53, 54, 42, 29, 40,
-  54, 43, 31, 30, 41,
-  55, 56, 44, 31, 42,
-  56, 45, 33, 32, 43,
-  57, 58, 46, 33, 44,
-  58, 47, 35, 34, 45,
-  59, XX, XX, 35, 46,
-  60, 49, 36, XX, XX,
-  61, 50, 37, 48, 60,
-  62, 51, 38, 37, 49,
-  63, 52, 39, 50, 62,
-  64, 53, 40, 39, 51,
-  65, 54, 41, 52, 64,
-  66, 55, 42, 41, 53,
-  67, 56, 43, 54, 66,
-  68, 57, 44, 43, 55,
-  69, 58, 45, 56, 68,
-  70, 59, 46, 45, 57,
-  71, XX, 47, 58, 70,
-  72, 61, 49, 48, XX,
-  73, 74, 62, 49, 60,
-  74, 63, 51, 50, 61,
-  75, 76, 64, 51, 62,
-  76, 65, 53, 52, 63,
-  77, 78, 66, 53, 64,
-  78, 67, 55, 54, 65,
-  79, 80, 68, 55, 66,
-  80, 69, 57, 56, 67,
-  81, 82, 70, 57, 68,
-  82, 71, 59, 58, 69,
-  83, XX, XX, 59, 70,
-  84, 73, 60, XX, XX,
-  85, 74, 61, 72, 84,
-  86, 75, 62, 61, 73,
-  87, 76, 63, 74, 86,
-  88, 77, 64, 63, 75,
-  89, 78, 65, 76, 88,
-  90, 79, 66, 65, 77,
-  91, 80, 67, 78, 90,
-  92, 81, 68, 67, 79,
-  93, 82, 69, 80, 92,
-  94, 83, 70, 69, 81,
-  95, XX, 71, 82, 94,
-  96, 85, 73, 72, XX,
-  97, 98, 86, 73, 84,
-  98, 87, 75, 74, 85,
-  99, 100, 88, 75, 86,
-  100, 89, 77, 76, 87,
-  101, 102, 90, 77, 88,
-  102, 91, 79, 78, 89,
-  103, 104, 92, 79, 90,
-  104, 93, 81, 80, 91,
-  105, 106, 94, 81, 92,
-  106, 95, 83, 82, 93,
-  107, XX, XX, 83, 94,
-  108, 97, 84, XX, XX,
-  109, 98, 85, 96, 108,
-  110, 99, 86, 85, 97,
-  111, 100, 87, 98, 110,
-  112, 101, 88, 87, 99,
-  113, 102, 89, 100, 112,
-  114, 103, 90, 89, 101,
-  115, 104, 91, 102, 114,
-  116, 105, 92, 91, 103,
-  117, 106, 93, 104, 116,
-  118, 107, 94, 93, 105,
-  119, XX, 95, 106, 118,
-  120, 109, 97, 96, XX,
-  121, 122, 110, 97, 108,
-  122, 111, 99, 98, 109,
-  123, 124, 112, 99, 110,
-  124, 113, 101, 100, 111,
-  125, 126, 114, 101, 112,
-  126, 115, 103, 102, 113,
-  127, 128, 116, 103, 114,
-  128, 117, 105, 104, 115,
-  129, 130, 118, 105, 116,
-  130, 119, 107, 106, 117,
-  131, XX, XX, 107, 118,
-  132, 121, 108, XX, XX,
-  133, 122, 109, 120, 132,
-  134, 123, 110, 109, 121,
-  135, 124, 111, 122, 134,
-  136, 125, 112, 111, 123,
-  137, 126, 113, 124, 136,
-  138, 127, 114, 113, 125,
-  139, 128, 115, 126, 138,
-  140, 129, 116, 115, 127,
-  141, 130, 117, 128, 140,
-  142, 131, 118, 117, 129,
-  143, XX, 119, 130, 142,
-  XX, 133, 121, 120, XX,
-  XX, XX, 134, 121, 132,
-  XX, 135, 123, 122, 133,
-  XX, XX, 136, 123, 134,
-  XX, 137, 125, 124, 135,
-  XX, XX, 138, 125, 136,
-  XX, 139, 127, 126, 137,
-  XX, XX, 140, 127, 138,
-  XX, 141, 129, 128, 139,
-  XX, XX, 142, 129, 140,
-  XX, 143, 131, 130, 141,
-  XX, XX, XX, 131, 142,
+  10, XX, XX, 23,
+  9, XX, 11, 22,
+  8, XX, 10, 21,
+  7, XX, 9, 20,
+  6, XX, 8, 19,
+  5, XX, 7, 18,
+  4, XX, 6, 17,
+  3, XX, 5, 16,
+  2, XX, 4, 15,
+  1, XX, 3, 14,
+  0, XX, 2, 13,
+  XX, XX, 1, 12,
+  22, 11, XX, 35,
+  21, 10, 23, 34,
+  20, 9, 22, 33,
+  19, 8, 21, 32,
+  18, 7, 20, 31,
+  17, 6, 19, 30,
+  16, 5, 18, 29,
+  15, 4, 17, 28,
+  14, 3, 16, 27,
+  13, 2, 15, 26,
+  12, 1, 14, 25,
+  XX, 0, 13, 24,
+  34, 23, XX, 47,
+  33, 22, 35, 46,
+  32, 21, 34, 45,
+  31, 20, 33, 44,
+  30, 19, 32, 43,
+  29, 18, 31, 42,
+  28, 17, 30, 41,
+  27, 16, 29, 40,
+  26, 15, 28, 39,
+  25, 14, 27, 38,
+  24, 13, 26, 37,
+  XX, 12, 25, 36,
+  46, 35, XX, 59,
+  45, 34, 47, 58,
+  44, 33, 46, 57,
+  43, 32, 45, 56,
+  42, 31, 44, 55,
+  41, 30, 43, 54,
+  40, 29, 42, 53,
+  39, 28, 41, 52,
+  38, 27, 40, 51,
+  37, 26, 39, 50,
+  36, 25, 38, 49,
+  XX, 24, 37, 48,
+  58, 47, XX, 71,
+  57, 46, 59, 70,
+  56, 45, 58, 69,
+  55, 44, 57, 68,
+  54, 43, 56, 67,
+  53, 42, 55, 66,
+  52, 41, 54, 65,
+  51, 40, 53, 64,
+  50, 39, 52, 63,
+  49, 38, 51, 62,
+  48, 37, 50, 61,
+  XX, 36, 49, 60,
+  70, 59, XX, 83,
+  69, 58, 71, 82,
+  68, 57, 70, 81,
+  67, 56, 69, 80,
+  66, 55, 68, 79,
+  65, 54, 67, 78,
+  64, 53, 66, 77,
+  63, 52, 65, 76,
+  62, 51, 64, 75,
+  61, 50, 63, 74,
+  60, 49, 62, 73,
+  XX, 48, 61, 72,
+  82, 71, XX, 95,
+  81, 70, 83, 94,
+  80, 69, 82, 93,
+  79, 68, 81, 92,
+  78, 67, 80, 91,
+  77, 66, 79, 90,
+  76, 65, 78, 89,
+  75, 64, 77, 88,
+  74, 63, 76, 87,
+  73, 62, 75, 86,
+  72, 61, 74, 85,
+  XX, 60, 73, 84,
+  94, 83, XX, 107,
+  93, 82, 95, 106,
+  92, 81, 94, 105,
+  91, 80, 93, 104,
+  90, 79, 92, 103,
+  89, 78, 91, 102,
+  88, 77, 90, 101,
+  87, 76, 89, 100,
+  86, 75, 88, 99,
+  85, 74, 87, 98,
+  84, 73, 86, 97,
+  XX, 72, 85, 96,
+  106, 95, XX, 119,
+  105, 94, 107, 118,
+  104, 93, 106, 117,
+  103, 92, 105, 116,
+  102, 91, 104, 115,
+  101, 90, 103, 114,
+  100, 89, 102, 113,
+  99, 88, 101, 112,
+  98, 87, 100, 111,
+  97, 86, 99, 110,
+  96, 85, 98, 109,
+  XX, 84, 97, 108,
+  118, 107, XX, 131,
+  117, 106, 119, 130,
+  116, 105, 118, 129,
+  115, 104, 117, 128,
+  114, 103, 116, 127,
+  113, 102, 115, 126,
+  112, 101, 114, 125,
+  111, 100, 113, 124,
+  110, 99, 112, 123,
+  109, 98, 111, 122,
+  108, 97, 110, 121,
+  XX, 96, 109, 120,
+  130, 119, XX, 143,
+  129, 118, 131, 142,
+  128, 117, 130, 141,
+  127, 116, 129, 140,
+  126, 115, 128, 139,
+  125, 114, 127, 138,
+  124, 113, 126, 137,
+  123, 112, 125, 136,
+  122, 111, 124, 135,
+  121, 110, 123, 134,
+  120, 109, 122, 133,
+  XX, 108, 121, 132,
+  142, 131, XX, XX,
+  141, 130, 143, XX,
+  140, 129, 142, XX,
+  139, 128, 141, XX,
+  138, 127, 140, XX,
+  137, 126, 139, XX,
+  136, 125, 138, XX,
+  135, 124, 137, XX,
+  134, 123, 136, XX,
+  133, 122, 135, XX,
+  132, 121, 134, XX,
+  XX, 120, 133, XX,
 };
 
 #define NUM_PATTERNS 21   // Total number of patterns, each 18 bytes wide
@@ -249,7 +248,7 @@ void setup() {
   Serial.println("Start");
   Serial2.begin(9600);  // Serial2: Bluetooth serial (ArduinoBlue)
 
-  FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN>(leds, TOTAL_LEDS);
+  FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);
   FastLED.setBrightness( BRIGHTNESS );
   
   // Set up the various mappings (1D lists in PROGMEM)
@@ -262,13 +261,13 @@ void setup() {
     shows[i].setColorSpeedMinMax(6,30);  // Make colors change faster (lower = faster)
     shows[i].setBandsBpm(10, 30);
 
-    shows[i].setAsPentagon();
+    shows[i].setAsSquare();
   }
   // Start Channel B offset at halfway through show
   shows[CHANNEL_B].setSmallCycle(MAX_SMALL_CYCLE / 2);
   last_time = millis();
 
-  for (uint8_t i = 0; i < TOTAL_LEDS; i++) {
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
     led_buffer[i] = CHSV(0, 0, 0);
   }
   
@@ -297,10 +296,10 @@ void loop() {
         shows[i].bounce();
         break;
       case 3:
-        bounceGlowing(i);
+        shows[i].bounceGlowing();
         break;
       case 4:
-        shows[i].plinko(119);  // 35
+        shows[i].plinko(119);
         break;
       case 5:
         windmill(i);
@@ -392,7 +391,6 @@ void fixed_delay() {
 // next_show - dependent on channel i
 //
 void next_show(uint8_t i) {
-//  led[i].fillBlack();
   led[i].push_frame();
   shows[i].resetAllClocks();
   shows[i].turnOnMorphing();
@@ -404,23 +402,20 @@ void next_show(uint8_t i) {
 //
 void pick_next_show(uint8_t i) {
   uint8_t mask = 0;
-  uint8_t symmetry = 0; 
-  uint8_t rotation = 0;
+  uint8_t symmetry = 0;
+  
   current_show[i] = is_other_channel_show_zero(i) ? random(1, NUM_SHOWS) : 0 ;
   show_variables[i] = random(NUM_PATTERNS);
   mask = pick_random_mask(i);
+  
   if (mask == 0) {
     symmetry = pick_random_symmetry();
-    if (symmetry == 0) {
-      rotation = random(3);
-    }
   }
+  
   show_variables[i + 6] = mask;
   show_variables[i + 4] = symmetry;
-  show_variables[i + 2] = rotation;
-//  current_show[i] = (current_show[i] + 1) % NUM_SHOWS;  // For debugging
+  show_variables[i + 2] = random(4);
   shows[i].pickRandomColorSpeeds();
-//  shows[i].tweakColorSpeeds();
   shows[i].pickRandomWait();
 //  log_status(i);  // For debugging
 }
@@ -447,17 +442,12 @@ uint8_t pick_random_pattern_type() {
 }
 
 uint8_t pick_random_symmetry() {
-  uint8_t random_symmetry = random(10);
+  uint8_t random_symmetry = random(12);
   
-  if (random_symmetry < 2) {
-    return 3;  // 4-fold
-  } else if (random_symmetry < 4) {
-    return 1;  // Horizontal mirroring
-  } else if (random_symmetry < 6) {
-    return 2;  // Vertical mirroring
-  } else {
-    return 0;  
+  if (random_symmetry <= 6) {
+    return random_symmetry;
   }
+  return 0;  // No symmetrizing
 }
 
 //
@@ -514,7 +504,7 @@ void patterns(uint8_t c) {
           uint8_t intense = get_wipe_intensity(x, y, show_variables[c + 10], c, (pattern_type < 4));
           uint8_t back_hue = shows[c].getBackColor();
           if (pattern_type < 4) {
-            shows[c].setPixeltoHue(i, shows[c].IncColor(back_hue, intense));
+            shows[c].setPixeltoHue(i, shows[c].IncColor(back_hue, intense / 2));
           } else {
             shows[c].setPixeltoColor(i, led[c].gradient_wheel(back_hue, map8(intense, 64, 255)));
           }
@@ -532,21 +522,14 @@ void test_neighbors(uint8_t channel) {
   uint8_t i = shows[channel].getCycle() % NUM_LEDS;
   led[channel].setPixelHue(i, shows[channel].getForeColor());
   
-  for (uint8_t j = 0; j < 5; j++) {
-    uint8_t n = pgm_read_byte_near(neighbors + (i * 5) + j);
+  for (uint8_t j = 0; j < 4; j++) {
+    uint8_t n = pgm_read_byte_near(neighbors + (i * 4) + j);
     if (n != XX) {
       led[channel].setPixelHue(n, shows[channel].getBackColor());
     }
   }
 }
 
-
-//
-// Get Neighbor
-//
-uint8_t getNeighbor(uint8_t pixel, uint8_t dir) {
-  return pgm_read_byte_near(neighbors + (pixel * 5) + (dir % PENTAGON));
-}
 
 //
 // Get Wipe Intensity
@@ -578,52 +561,6 @@ uint8_t get_wipe_intensity(uint8_t x, uint8_t y, uint8_t wipe_number, uint8_t c,
   return beatsin8(freq, 0, 255, 0, intensity);
 }
 
-
-//
-// Bounce Glowing
-//
-void bounceGlowing(uint8_t channel) {
-  
-  if (shows[channel].isShowStart()) {
-    shows[channel].num_balls = random(2, 4);
-    shows[channel].clearTrails();
-  }
-
-  if (shows[channel].getMorph() != 0) {
-    return;
-  }
-
-  // Clear background
-  shows[channel].fill(CHSV(BALL_HUE, 255, 20));
-
-  for (uint8_t n = 0; n < shows[channel].num_balls; n++) {
-    uint8_t ball_position = shows[channel].bounce_pos[n];
-    uint8_t ball_x = ball_position % SIZE;
-    uint8_t ball_y = ball_position / SIZE;
-
-    // Draw Ball
-    for (uint8_t x = 0; x < SIZE; x++) {
-      for (uint8_t y = 0; y < SIZE; y++) {
-        uint8_t distance = get_dist(x, y, ball_x, ball_y);
-        if (distance < BALL_SIZE) {
-          uint8_t intensity = map(distance, 0, BALL_SIZE, 255, 0);
-          led[channel].addPixelColor(get_pixel_from_coord(x, y), CHSV(BALL_HUE, 255, intensity));
-        }
-      }
-    }
-
-    // Move Ball
-    uint8_t max_attempts = 10;
-
-    while (getNeighbor(ball_position, shows[channel].bounce_dir[n]) == XX || random(0, PENTAGON * 3) == 0) {
-            shows[channel].bounce_dir[n] = random(0, PENTAGON);
-            if (max_attempts-- == 0) {
-              break;
-            }
-          }
-    shows[channel].bounce_pos[n] = getNeighbor(ball_position, shows[channel].bounce_dir[n]);
-  }
-}
 
 //
 // Cone Push
@@ -890,7 +827,7 @@ void set_life_coord(uint8_t x, uint8_t y, boolean value, uint8_t hue, uint8_t i)
         } else {
           shows[i].setPixeltoHue(pixel, hue);
         }
-      }
+     }
 }
 
 //// End specialized shows
@@ -906,26 +843,29 @@ void morph_channels(uint8_t fract) {
   
   for (int i = 0; i < NUM_LEDS; i++) {
     led_number = convert_pixel_to_led(i);
+    
     if (led_number != XX) {
       CHSV color_b = mask(led[CHANNEL_B].getInterpFrameColor(rotate_pixel(i, CHANNEL_B)), i, CHANNEL_B);
       CHSV color_a = mask(led[CHANNEL_A].getInterpFrameColor(rotate_pixel(i, CHANNEL_A)), i, CHANNEL_A);
       CHSV color = led[CHANNEL_A].getInterpHSV(color_b, color_a, fract);  // interpolate a + b channels
+      
       color = lightning(narrow_palette(color));  // (ArduinoBlue)
-      if (SMOOTHING > 0) {
+      
+      if (SMOOTHING > 0) {  // Smoothing
         color = led[CHANNEL_A].smooth_color(led_buffer[led_number], color, SMOOTHING);  // smoothing
       }
+      
       leds[led_number] = color;
       led_buffer[led_number] = color;
     }
   }
-  turn_off_spacer_leds();
 }
 
 //
 // mask
 //
 CHSV mask(CHSV color, uint8_t i, uint8_t channel) {
-  if (show_variables[channel + 6] == 0 || current_show[i] == 0) {  // ToDo: Check this
+  if (show_variables[channel + 6] == 0 || current_show[i] == 0) {
     return color;  // no masking
   }
   uint8_t mask_value = show_variables[channel + 6] - 1;
@@ -948,18 +888,18 @@ uint8_t convert_pixel_to_led(uint8_t i) {
     return XX;
   }
   uint8_t LED_LOOKUP[] = {
-     0,  2,  5,  6,  9, 10, 13, 14, 17, 18, 21, 22,
-     1,  3,  4,  7,  8, 11, 12, 15, 16, 19, 20, 23,
-    50, 47, 46, 43, 42, 39, 38, 35, 34, 31, 30, 28,
-    49, 48, 45, 44, 41, 40, 37, 36, 33, 32, 29, 27,
-    54, 56, 59, 60, 63, 64, 67, 68, 71, 72, 75, 76,
-    55, 57, 58, 61, 62, 65, 66, 69, 70, 73, 74, 77,
-   104,101,100, 97, 96, 93, 92, 89, 88, 85, 84, 82,
-   103,102, 99, 98, 95, 94, 91, 90, 87, 86, 83, 81,
-   108,110,113,114,117,118,121,122,125,126,129,130,
-   109,111,112,115,116,119,120,123,124,127,128,131,
-   158,155,154,151,150,147,146,143,142,139,138,136,
-   157,156,153,152,149,148,145,144,141,140,137,135
+    144, 141, 140, 137, 136, 133, 132, 129, 128, 125, 124, 122,  // 12
+    143, 142, 139, 138, 135, 134, 131, 130, 127, 126, 123, 121,  // 11
+     98, 100, 101, 104, 105, 108, 109, 112, 113, 116, 117, 120,  // 10
+     97,  99, 102, 103, 106, 107, 110, 111, 114, 115, 118, 119,  // 9
+     96,  93,  92,  89,  88,  85,  84,  81,  80,  77,  76,  74,  // 8
+     95,  94,  91,  90,  87,  86,  83,  82,  79,  78,  75,  73,  // 7
+     50,  52,  53,  56,  57,  60,  61,  64,  65,  68,  69,  72,  // 6
+     49,  51,  54,  55,  58,  59,  62,  63,  66,  67,  70,  71,  // 5
+     48,  45,  44,  41,  40,  37,  36,  33,  32,  29,  28,  26,  // 4
+     47,  46,  43,  42,  39,  38,  35,  34,  31,  30,  27,  25,  // 3
+      2,   4,   5,   8,   9,  12,  13,  16,  17,  20,  21,  24,  // 2
+      1,   3,   6,   7,  10,  11,  14,  15,  18,  19,  22,  23   // 1
   };
   return LED_LOOKUP[i % NUM_LEDS];
 }
@@ -967,10 +907,30 @@ uint8_t convert_pixel_to_led(uint8_t i) {
 //
 // mirror_pixels
 //
-void mirror_pixels(uint8_t channel) {
+void mirror_pixels(uint8_t channel) {  
   uint8_t symmetry = show_variables[4 + channel];
   
   if (symmetry == 1 || symmetry == 3) {  // Horizontal mirroring
+    for (uint8_t y = 0 ; y < SIZE; y++) {
+      for (uint8_t x = 0 ; x < SIZE; x++) {
+        if (y >= SIZE / 2) {
+          led[channel].setInterpFrame(get_pixel_from_coord(x, SIZE - y - 1), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
+        }
+      }
+    }
+  }
+  
+  if (symmetry == 2 || symmetry == 3) {  // Vertical mirroring
+    for (uint8_t y = 0 ; y < SIZE; y++) {
+      for (uint8_t x = 0 ; x < SIZE; x++) {
+        if (x >= SIZE / 2) {
+          led[channel].setInterpFrame(get_pixel_from_coord(SIZE - x - 1, y), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
+        }
+      }
+    }
+  }
+
+  if (symmetry == 4 || symmetry == 6) {  // Diagonal 1 mirroring
     for (uint8_t y = 0 ; y < SIZE; y++) {
       for (uint8_t x = 0 ; x < SIZE; x++) {
         if (x > y) {
@@ -980,13 +940,11 @@ void mirror_pixels(uint8_t channel) {
     }
   }
   
-  if (symmetry == 2 || symmetry == 3) {  // Vertical mirroring
+  if (symmetry == 5 || symmetry == 6) {  // Diagonal 2 mirroring
     for (uint8_t y = 0 ; y < SIZE; y++) {
       for (uint8_t x = 0 ; x < SIZE; x++) {
         if (x + y < SIZE - 1) {
-          uint8_t new_y = SIZE - x - 1;
-          uint8_t new_x = x - y + new_y;
-          led[channel].setInterpFrame(get_pixel_from_coord(new_x, new_y), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
+          led[channel].setInterpFrame(get_pixel_from_coord(SIZE - y - 1, SIZE - x - 1), led[channel].getInterpFrameColor(get_pixel_from_coord(x,y)));
         }
       }
     }
@@ -994,35 +952,23 @@ void mirror_pixels(uint8_t channel) {
 }
 
 //
-// rotate_pixel
+// rotate_pixel - rotate square grid 90-degrees for each "r"
 //
 uint8_t rotate_pixel(uint8_t i, uint8_t channel) {
+  uint8_t new_x, new_y;
   uint8_t x = i % SIZE;
   uint8_t y = i / SIZE;
-  uint8_t rotation = show_variables[2 + channel];  // Very strange memory bug here
+  uint8_t rotation = show_variables[2 + channel];
 
-  if (rotation > 1) {
-    y = SIZE - y - 1;
-  }
-  if (rotation == 1 || rotation == 2) {
-    x = SIZE - x - 1;
+  for (uint8_t r = rotation; r > 0; r--) {
+    new_x = SIZE - y - 1;
+    new_y = x;
+    x = new_x;
+    y = new_y;
   }
 
   return ((y * SIZE) + x) % NUM_LEDS;
 }
-
-//
-// turn off spacer leds - blacken the 16 space pixels
-//
-void turn_off_spacer_leds() {
-  uint8_t spacer_leds[] = { 
-    24, 25, 26, 51, 52, 53, 78, 79, 80, 105, 106, 107, 132, 133, 134
-  };
-  for (uint8_t i = 0; i < NUMBER_SPACER_LEDS; i++) {
-    leds[spacer_leds[i]] = CRGB(0, 0, 0);
-  }
-}
-
 
 
 //
@@ -1032,7 +978,6 @@ uint8_t get_intensity(uint8_t i) {
   uint8_t intensity;  // 0 = Off, 255 = full On
   uint16_t small_cycle = shows[i].getSmallCycle();
 
-  // Similar logic to check_fades (deprecated)
   if (small_cycle < FADE_CYCLES) {
     intensity = map(small_cycle, 0, FADE_CYCLES, 0, 255);  // rise
   } else if (small_cycle <= (MAX_SMALL_CYCLE / 2)) {

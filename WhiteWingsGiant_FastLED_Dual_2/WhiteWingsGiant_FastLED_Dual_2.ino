@@ -3,21 +3,19 @@
 #include <Shows.h>
 
 //
-//  Linear Lights with FastLED
+//  Gold Dinosaur with 8 spikes
 //
 //  Dual shows - Blend together 2 shows running at once
 //
 //  2 CHSV buffers for Channel A + B
 //  interpolate the two buffers on to the CRGB leds
 //
-//  Removed: Noise, palettes, 2D shows (need to do this on Show repository)
+//  12/8/2019
 //
-//  3/16/2019
-//
-#define NUM_LEDS 69  // Chance of memory shortage for large NUM_LEDS
-#define TOTAL_LEDS  (NUM_LEDS * 2)  // Symmetric
+#define NUM_LEDS 32
+#define ACTUAL_LEDS 64
 
-#define BRIGHTNESS  255 // (0-255)
+#define BRIGHTNESS  64 // (0-255)
 
 #define DELAY_TIME 40  // in milliseconds. FastLED demo has 8.3 ms delay!
 
@@ -30,19 +28,24 @@
 Led led[] = { Led(NUM_LEDS), Led(NUM_LEDS) };  // Class instantiation of the 2 Led libraries
 Shows shows[] = { Shows(&led[CHANNEL_A]), Shows(&led[CHANNEL_B]) };  // 2 Show libraries
 CHSV leds_buffer[DUAL][NUM_LEDS];  // CHSV buffers for Channel A + B; may break the memory bank
-CRGB leds[TOTAL_LEDS];  // Hook for FastLED library
+CRGB leds[ACTUAL_LEDS];  // Hook for FastLED library
+
+CHSV morph_buffer[DUAL][NUM_LEDS];
 
 // Shows
-#define START_SHOW_CHANNEL_A  3  // Channels A starting show
+#define START_SHOW_CHANNEL_A  0  // Channels A starting show
 #define START_SHOW_CHANNEL_B  1  // Channels B starting show
 uint8_t current_show[] = { START_SHOW_CHANNEL_A, START_SHOW_CHANNEL_B };
 #define NUM_SHOWS 12
 
 // Clocks and time
 #define SHOW_DURATION 30  // seconds
-#define FADE_TIME 3   // seconds to fade in. If FADE_TIME = SHOW_DURATION, then Always Be Fading
+#define FADE_TIME 30   // seconds to fade in. If FADE_TIME = SHOW_DURATION, then Always Be Fading
 uint32_t MAX_SMALL_CYCLE = SHOW_DURATION * 2 * (1000 / DELAY_TIME);  // *2! 50% = all on, 50% = all off, and rise + decay on edges
 #define FADE_CYCLES  (FADE_TIME * 1000 / DELAY_TIME)  // cycles to fade in + out
+
+#define XX 99
+
 
 //
 // Setup
@@ -56,7 +59,7 @@ void setup() {
   Serial.begin(9600);
   Serial.println("Start");
 
-  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, TOTAL_LEDS);  // Only 1 leds object
+  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, ACTUAL_LEDS);;  // Only 1 leds object
   FastLED.setBrightness( BRIGHTNESS );
 
   // Set up the various mappings here (1D lists in PROGMEM)
@@ -124,6 +127,7 @@ void loop() {
   }
 
   update_leds();  // morph together the 2 chanels & push the interp_frame on to the leds
+  unpack_leds();
   morph_channels(get_intensity(CHANNEL_A));  // morph together the 2 leds channels and deposit on to Channel_A
   FastLED.show();  // Update the display
   advance_clocks();  // advance the cycle clocks and check for next show
@@ -157,6 +161,7 @@ void next_show(uint8_t i) {
   shows[i].pickRandomWait();
 }
 
+
 //
 // update_leds - push the interp_frame on to the leds
 //
@@ -169,33 +174,31 @@ void update_leds() {
 }
 
 //
+// unpack_leds - if simplespines, need to unpack into component leds
+//
+void unpack_leds() {
+  for (uint8_t channel = 0; channel < DUAL; channel++) {
+    for (uint8_t i = 0; i < NUM_LEDS; i++) {
+        morph_buffer[channel][i] = leds_buffer[channel][i];
+    }
+  }
+}
+
+
+//
+// morph_channels - morph together the 2 chanels and update the LEDs
+//
+//
 // morph_channels - morph together the 2 chanels and update the LEDs
 //
 void morph_channels(uint8_t fract) {
   for (int i = 0; i < NUM_LEDS; i++) {
-    CHSV color = led[CHANNEL_A].getInterpHSV(leds_buffer[CHANNEL_B][i], 
-                                             leds_buffer[CHANNEL_A][i], 
+    CHSV color = led[CHANNEL_A].getInterpHSV(morph_buffer[CHANNEL_B][i], 
+                                             morph_buffer[CHANNEL_A][i], 
                                              fract);  // interpolate a + b channels
-    leds[lookup_led(i)] = color;
-    leds[get_paired_led(i)] = color;
+    leds[i] = color;
+    leds[ACTUAL_LEDS - i - 1] = color;
   }
-}
-
-//
-// lookup_led
-//
-uint8_t lookup_led(uint8_t i) {
-  if (i <= 47) return i;
-  else return i + 20;
-}
-
-//
-// get_paired_led
-//
-uint8_t get_paired_led(uint8_t i) {
-  if (i <= 27) return 135 - (i - 0); // map(i, 0, 27, 135, 108);
-  else if (i <= 47) return 67 - (i - 28); //map(i, 28, 47, 67, 48);
-  else return 107 - (i - 48); // map(i, 48, 67, 108, 88);
 }
 
 //
