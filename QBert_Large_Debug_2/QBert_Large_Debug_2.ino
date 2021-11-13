@@ -1,6 +1,7 @@
 #include <FastLED.h>
 #include <Led.h>
 #include <Shows.h>
+#include "painlessMesh.h"
 
 //
 //  Linear Lights with FastLED
@@ -16,20 +17,25 @@
 //
 //  Modernized
 //
-#define NUM_LEDS 191  // Chance of memory shortage for large NUM_LEDS
+#define NUM_LEDS 30  // Chance of memory shortage for large NUM_LEDS
 
 uint8_t BRIGHTNESS = 255;  // (0-255) (ArduinoBlue)
 
-uint8_t DELAY_TIME = 20;  // in milliseconds (ArduinoBlue)
+uint8_t DELAY_TIME = 30;  // in milliseconds (ArduinoBlue)
 long last_time;
 #define SMOOTHING 1   // 0 = no smooth, lower the number = more smoothing
 
-#define DATA_PIN 11  // 7 
-#define CLOCK_PIN 13  // 8
+#define DATA_PIN 0 // Feather // 11  // 7 
+#define CLOCK_PIN 2 // Feather // 13  // 8
 
 #define CHANNEL_A  0  // Don't change these
 #define CHANNEL_B  1
 #define DUAL       2  // How many shows to run at once (dual = 2). Don't change.
+
+// MESH Details
+#define   MESH_PREFIX     "ROARY" // name for your MESH
+#define   MESH_PASSWORD   "roarroar" // password for your MESH
+#define   MESH_PORT       5555 //default port
 
 Led led[] = { Led(NUM_LEDS), Led(NUM_LEDS) };  // Class instantiation of the 2 Led libraries
 Shows shows[] = { Shows(&led[CHANNEL_A]), Shows(&led[CHANNEL_B]) };  // 2 Show libraries
@@ -46,53 +52,19 @@ uint8_t hue_width = 255;
 uint8_t current_show[] = { START_SHOW_CHANNEL_A, START_SHOW_CHANNEL_B };
 #define NUM_SHOWS 12
 
-// Clocks and time
-#define SHOW_DURATION 100  // seconds
-uint8_t FADE_TIME = 0;  // seconds to fade in + out (Arduino Blue)
-uint32_t MAX_SMALL_CYCLE = SHOW_DURATION * 2 * (1000 / DELAY_TIME);  // *2! 50% = all on, 50% = all off, and rise + decay on edges
-#define FADE_CYCLES  (FADE_TIME * 1000 / DELAY_TIME)  // cycles to fade in + out
+String message;  // String to send to other displays
 
-//
-// Setup
-//
-void setup() {
+#define MSG_FREQUENCY  50  // send message every X milliseconds
+Scheduler userScheduler; // to control your personal task
+painlessMesh mesh;
 
-  delay( 3000 ); // power-up safety delay
+// User stub
+//void updateLeds();
 
-  randomSeed(analogRead(0));
-  
-  Serial.begin(9600);
-  Serial.println("Start");
-
-  FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);  // Only 1 leds object
-  FastLED.setBrightness( BRIGHTNESS );
-
-  // Set up the various mappings here (1D lists in PROGMEM)
-  //  for (uint8_t i = 0; i < DUAL; i++) {
-  //    led[i].setLedMap(ConeLookUp);  // mapping of pixels to actual leds
-  //    shows[i] = Shows(&led[i]);  // Show library - reinitialized for led mappings
-  //  }
-
-  shows[CHANNEL_B].setSmallCycle(MAX_SMALL_CYCLE / 2);  // Start Channel B offset at halfway through show
-  last_time = millis();
-  
-  for (uint8_t i = 0; i < DUAL; i++) {
-    shows[i].fillForeBlack();
-    led[i].push_frame();
-  }
-
-  for (uint8_t i = 0; i < NUM_LEDS; i++) {
-    led_buffer[i] = CHSV(0, 0, 0);
-  }
-
-  if (ONLY_RED) {  // (ArduinoBlue)
-    hue_start = 192;
-    hue_width = 124;
-  }
-}
-
-void loop() {
-
+void updateLeds() {
+  // Moved to a task-scheduled event
+  Serial.println("oo");
+  /*
   for (uint8_t i = 0; i < DUAL; i++) {
       
     switch (current_show[i]) {
@@ -140,20 +112,67 @@ void loop() {
   morph_channels(get_intensity(CHANNEL_A));  // morph together the 2 leds channels and deposit on to Channel_A
   FastLED.show();  // Update the display
   advance_clocks();  // advance the cycle clocks and check for next show
-  fixed_delay();
+  */
 }
 
+Task taskUpdateLeds(DELAY_TIME, TASK_FOREVER, &updateLeds);
+
+// Clocks and time
+#define SHOW_DURATION 100  // seconds
+uint8_t FADE_TIME = 0;  // seconds to fade in + out (Arduino Blue)
+uint32_t MAX_SMALL_CYCLE = SHOW_DURATION * 2 * (1000 / DELAY_TIME);  // *2! 50% = all on, 50% = all off, and rise + decay on edges
+#define FADE_CYCLES  (FADE_TIME * 1000 / DELAY_TIME)  // cycles to fade in + out
+
 //
-// fixed_delay - make every cycle the same time
+// Setup
 //
-void fixed_delay() {
-  long new_time = millis();
-  long time_delta = new_time - last_time;  // how much time has elapsed? Usually 3-5 milliseconds
-  last_time = new_time;  // update the counter
-  if (time_delta < DELAY_TIME) {  // if we have excess time,
-    delay(DELAY_TIME - time_delta);  // delay for the excess
+void setup() {
+
+  delay( 3000 ); // power-up safety delay
+
+  pinMode(DATA_PIN, OUTPUT);
+  pinMode(CLOCK_PIN, OUTPUT);
+  
+  randomSeed(analogRead(0));
+  
+  Serial.begin(115200);
+  Serial.println("Start");
+
+  FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);  // Only 1 leds object
+  FastLED.setBrightness( BRIGHTNESS );
+
+  // Set up the various mappings here (1D lists in PROGMEM)
+  //  for (uint8_t i = 0; i < DUAL; i++) {
+  //    led[i].setLedMap(ConeLookUp);  // mapping of pixels to actual leds
+  //    shows[i] = Shows(&led[i]);  // Show library - reinitialized for led mappings
+  //  }
+
+  shows[CHANNEL_B].setSmallCycle(MAX_SMALL_CYCLE / 2);  // Start Channel B offset at halfway through show
+
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+    led_buffer[i] = CHSV(0, 0, 0);
+    leds[i] = CRGB(255, 0, 0); // For testing
   }
+  
+  if (ONLY_RED) {  // (ArduinoBlue)
+    hue_start = 192;
+    hue_width = 124;
+  }
+
+  mesh.setDebugMsgTypes( ERROR | STARTUP );  // set before init() so that you can see startup messages
+  
+  mesh.init( MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT );
+
+  userScheduler.addTask(taskUpdateLeds);
+  taskUpdateLeds.enable();
 }
+
+void loop() {
+  Serial.print("x");
+}
+
+
+
 
 //
 // advance_clocks

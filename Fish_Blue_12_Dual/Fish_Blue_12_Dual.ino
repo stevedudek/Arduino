@@ -123,7 +123,7 @@ char number_buffer[MAX_NUM];   // Incoming number buffer
 
 // Lookup tables
 
-uint8_t coords[] PROGMEM = {
+const uint8_t coords[] PROGMEM = {
   XX,XX, 1, 0,XX,XX,XX,  // 4 (1) - Head
   XX, 8, 7, 6, 5, 4,XX,  // 5
    9,10,11,12,13,14,XX,  // 6
@@ -1230,5 +1230,3 @@ void log_status(uint8_t i) {
   Serial.print(current_pattern[i]);
   Serial.println(".");
 }
-
-

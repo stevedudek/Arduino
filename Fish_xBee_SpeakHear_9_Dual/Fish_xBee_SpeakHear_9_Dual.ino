@@ -35,7 +35,7 @@ uint8_t BRIGHTNESS = 255;  // (0-255)
 #define MAX_XGRID  7   // 7 has all fish in a line (not stacked)
 #define MAX_YGRID  66  // 66 would have all fish in a line
 
-#define DATA_PIN 9
+#define DATA_PIN 7
 #define CLOCK_PIN 8
 
 #define CHANNEL_A  0  // Don't change these
@@ -1092,5 +1092,3 @@ void log_status(uint8_t i) {
   Serial.print(current_pattern[i]);
   Serial.println(".");
 }
-
-

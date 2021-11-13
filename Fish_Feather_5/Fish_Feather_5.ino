@@ -1,71 +1,68 @@
 #include <FastLED.h>
 #include <Led.h>
 #include <Shows.h>
-#include <ArduinoBlue.h>
+#include "painlessMesh.h"
+#include <Arduino_JSON.h>
 
 //
 //  Fish
 //
-//  4/9/19
+//  10/8/21
 //
-//  ArduinoBlue wireless bluetooth controller (ArduinoBlue)
+//  On the Adafruit Feather
 //
-//  FOR TEENSY ONLY
+//  MESH network! No phone connection
 //
 //  Speaking & Hearing
 //
-//  Dual shows - Blend together 2 shows running at once
-//
-//  2 CHSV buffers for Channel A + B
-//  interpolate the two buffers on to the CRGB leds
-//
-#define FISH_NUM   0
+#define FISH_NUM   0  // 0-5
 #define MAX_FISH   6
 
-uint8_t BRIGHTNESS = 255;  // (0-255) (ArduinoBlue)
+uint8_t bright = 255;  // (0-255)
+uint8_t curr_bright = bright;
 
-uint8_t DELAY_TIME = 30;  // in milliseconds (ArduinoBlue)
+uint8_t show_speed = 32;  // (0-255)
 
-#define DATA_PIN 7  // data = 7
-#define CLOCK_PIN 8  // clock = 8
+
+#define MAX_LUMENS 10000  // estimated maximum brightness until flickering
+
+#define DELAY_TIME 20  // in milliseconds. A cycle takes 3-5 milliseconds. 15+ is safe.
+#define SMOOTHING 1   // 0 = no smooth, lower the number = more smoothing
+
+#define DATA_PIN 0  // data = 7 (Teensy) or 0 (Feather)
+#define CLOCK_PIN 2  // clock = 8 (Teensy) or 2 (Feather)
 
 #define CHANNEL_A  0  // Don't change these
 #define CHANNEL_B  1
 #define DUAL       2  // How many shows to run at once (dual = 2). Don't change.
 
-#define ARE_CONNECTED false  // Are the Fish talking to each other?
-#define IS_SPEAKING false  // true = speaking, false = hearing
-
-boolean is_lost = false;
-unsigned long last_connection = millis();
-#define MAX_SILENT_TIME  (3 * 1000)  // Time (in sec) without communication before marked as is_lost
-
 #define NUM_LEDS 61
 #define HALF_LEDS ((NUM_LEDS / 2) + 1)  // Half that number
 #define TOTAL_LEDS (MAX_FISH * NUM_LEDS)
-#define SIMPLE_TAIL true  // simple tails have 5 segments
-
-#define MAX_XCOORD  7
-#define MAX_YCOORD 11
+#define SIMPLE_TAIL false  // simple tails have 5 segments
 
 #define XX  255
 
 // Fish Grid - Each fish is 11 wide x 7 tall (must be the same for all fish)
-//    UNTESTED
-#define FISH_XGRID  0  // x-coord (upper left)
+#define FISH_WIDTH   11
+#define FISH_HEIGHT   7
+
+#define FISH_XGRID  (FISH_WIDTH * FISH_NUM)  // x-coord (upper left)
 #define FISH_YGRID  0  // y-coord (upper left)
-#define MAX_XGRID  MAX_XCOORD  // 7 has all fish in a line (not stacked)
-#define MAX_YGRID  MAX_YCOORD  // 66 would have all fish in a line
+
+#define MAX_XGRID  (FISH_WIDTH * MAX_FISH)  // 7 has all fish in a line (not stacked)
+#define MAX_YGRID  (FISH_HEIGHT * MAX_FISH)  // 66 would have all fish in a line
+
 
 // Light colors
 #define MAX_COLOR 256   // Colors are 0-255
-#define FISH_HUE (FISH_NUM * (FISH_NUM / MAX_COLOR)) // Main fish color
-CHSV BLACK = CHSV(0, 0, 0);
+#define FISH_HUE  20  // orange = goldfish!  //  (FISH_NUM * (MAX_COLOR / MAX_FISH))  // Main fish color
+#define BLACK  CHSV(0, 0, 0)
 
 Led led[] = { Led(NUM_LEDS), Led(NUM_LEDS) };  // Class instantiation of the 2 Led libraries
 Shows shows[] = { Shows(&led[CHANNEL_A]), Shows(&led[CHANNEL_B]) };  // 2 Show libraries
-CHSV leds_buffer[DUAL][NUM_LEDS];  // CHSV buffers for Channel A + B; may break the memory bank
 CRGB leds[NUM_LEDS];  // The Leds themselves
+CHSV led_buffer[NUM_LEDS];  // For smoothing
 
 #define ONLY_RED false  // (ArduinoBlue)
 uint8_t hue_start = 0;
@@ -73,53 +70,55 @@ uint8_t hue_width = 255;
 uint8_t curr_lightning = 0;
 
 // Shows
-#define START_SHOW_CHANNEL_A  1  // Starting show for Channels A. One of these needs to be 0.
-#define START_SHOW_CHANNEL_B  0  // Starting show for Channels B. One of these needs to be 0.
+#define START_SHOW_CHANNEL_A   0  // Starting show for Channels A. One of these needs to be 0.
+#define START_SHOW_CHANNEL_B   1  // Starting show for Channels B. One of these needs to be 0.
 uint8_t current_show[] = { START_SHOW_CHANNEL_A, START_SHOW_CHANNEL_B };
 uint8_t current_pattern[] = { 0, 1 };
-#define NUM_SHOWS 20
+uint8_t mask_pattern[] = { 0, 0 };
+#define NUM_SHOWS 17
 
 // Clocks and time
-#define SHOW_DURATION 6  // Typically 30 seconds. Size problems at 1800+ seconds.
-uint8_t FADE_TIME = 2;  // seconds to fade in + out (Arduino Blue)
-uint32_t MAX_SMALL_CYCLE = SHOW_DURATION * 2 * (1000 / DELAY_TIME);  // *2! 50% = all on, 50% = all off, and rise + decay on edges
-#define FADE_CYCLES  (FADE_TIME * 1000 / DELAY_TIME)  // cycles to fade in + out
+uint8_t show_duration = 40;  // Typically 30 seconds. Size problems at 1800+ seconds.
+uint8_t fade_amount = 196;  // 0 = no fading, to 255 = always be fading
+uint32_t max_small_cycle = (show_duration * 2 * (1000 / DELAY_TIME));  // *2! 50% = all on, 50% = all off, and rise + decay on edges
 
-// ArduinoBlue
-ArduinoBlue phone(Serial2); // Blue Tx = pin 9; Blue Rx = pin 10
-#define HUE_SLIDER        0
-#define HUE_WIDTH_SLIDER  1
-#define SPEED_SLIDER      2
-#define BRIGHTNESS_SLIDER 3
-#define FADE_TIME_SLIDER  4
-#define BAM_BUTTON        0
-#define BOLT_TIME        20
+// MESH Details
+#define   MESH_PREFIX     "ROARY" // name for your MESH
+#define   MESH_PASSWORD   "roarroar" // password for your MESH
+#define   MESH_PORT       5555 //default port
 
+#define ARE_CONNECTED true  // Are the Fish talking to each other?
+#define IS_SPEAKING false  // true = speaking, false = hearing
 
-// xBee language
-#define COMMAND_START      '+'
-#define COMMAND_FORE       'F'
-#define COMMAND_BACK       'B'
-#define COMMAND_BRIGHTNESS 'I'
-#define COMMAND_PALETTE    'H'
-#define COMMAND_PAL_WIDTH  'J'
-#define COMMAND_SPEED      'Y'
-#define COMMAND_FADE       'R'
-#define COMMAND_WAIT       'W'
-#define COMMAND_SHOW       'S'
-#define COMMAND_SM_CYCLE   'C'
-#define COMMAND_PATTERN    'P'
-#define COMMAND_NOISE      'N'
-#define COMMAND_BOLT       'X'
-#define COMMAND_CHANNEL_A  'x'
-#define COMMAND_CHANNEL_B  'y'
-#define COMMAND_COMMA      ','
-#define COMMAND_PERIOD     '.'
-#define EMPTY_CHAR         ' '
-#define MAX_MESSAGE       100
-#define MAX_NUM             6  // To handle 65,535 of small_cycle
-char message[MAX_MESSAGE];     // Incoming message buffer
-char number_buffer[MAX_NUM];   // Incoming number buffer
+boolean is_lost = false;
+unsigned long last_connection = 0;
+#define MAX_SILENT_TIME  10000  // Time (in cycles) without communication before marked as is_lost
+
+String message;  // String to send to other displays
+
+//#define MSG_FREQUENCY  50  // send message every X milliseconds
+#define MESSAGE_REPEAT 3   // send this many duplicate messages
+#define MESSAGE_SPACING 3   // wait this many cycles
+Scheduler userScheduler; // to control your personal task
+painlessMesh mesh;
+
+#define PHONE_MESSAGE  0
+#define MESH_MESSAGE  1
+
+#define BRIGHTNESS_COMMAND  0  // all of these will be 0-255
+#define HUE_COMMAND  1
+#define HUE_WIDTH_COMMAND  2
+#define SPEED_COMMAND  3
+#define SHOW_DURATION_COMMAND  4
+#define FADE_COMMAND 5
+
+// User stub
+//void sendMessage();
+void updateLeds();
+String getReadings();  // Prototype for reading state of LEDs
+
+//Task taskSendMessage(MSG_FREQUENCY, TASK_FOREVER, &sendMessage);
+Task taskUpdateLeds(TASK_MILLISECOND * DELAY_TIME, TASK_FOREVER, &updateLeds);
 
 // Lookup tables
 
@@ -137,57 +136,8 @@ uint8_t coords[] PROGMEM = {
   XX,53,54,56,58,59,XX,  // 8 (5) - Tail
 };
 
-//
-// PATTERNS - 8 hex bytes per pattern (see Fish.ipynb)
-//
-#define NUM_PATTERNS 19   // Total number of patterns
-const uint8_t pattern_matrix[][8] = {
-  { 0xa, 0xab, 0x56, 0xa5, 0x4a, 0xa9, 0x55, 0x50 },
-  { 0xd, 0x99, 0x8c, 0xcc, 0x66, 0x6d, 0xaa, 0xd0 },
-  { 0xf2, 0x18, 0x20, 0xc1, 0x6, 0x11, 0x97, 0xf8 },
-  { 0xf2, 0x18, 0x71, 0xe5, 0x56, 0xbb, 0xd1, 0xe0 },
-  { 0xf2, 0x18, 0x51, 0x24, 0x50, 0x91, 0xa9, 0x20 },
-  { 0xf0, 0x7e, 0x3, 0xf0, 0x1f, 0x83, 0xc4, 0xc8 },
-  { 0xf, 0xc3, 0x26, 0xd9, 0x30, 0xc6, 0x7f, 0x38 },
-  { 0x2, 0x25, 0x25, 0x29, 0x29, 0x12, 0x54, 0xc8 },
-  { 0x8, 0xa4, 0x50, 0xc1, 0x6, 0x2a, 0x42, 0x10 },
-  { 0x8, 0x99, 0x4, 0xc8, 0x29, 0x12, 0x43, 0x30 },
-  
-  { 0xfd, 0xdb, 0x7, 0xf8, 0x36, 0xee, 0x46, 0xd8 },
-  { 0xf2, 0x19, 0xdf, 0x3e, 0xf9, 0xee, 0x6a, 0x10 },
-  { 0xd, 0xe7, 0xdf, 0x3e, 0xf9, 0xee, 0x68, 0x0 },
-  { 0xf0, 0x43, 0x8f, 0x3e, 0xff, 0xc6, 0x6c, 0xc8 },
-  { 0xf3, 0xf8, 0xf, 0xc, 0xfc, 0x80, 0xe3, 0x30 },
-  { 0x3, 0x9d, 0xc7, 0x11, 0xc7, 0x62, 0x19, 0xf8 },
-  { 0xff, 0xe7, 0x8e, 0x1c, 0x79, 0xec, 0x7, 0x38 },
-  { 0xf7, 0x5b, 0x8c, 0xc, 0x76, 0xb9, 0xbb, 0xf0 },
-  { 0xfd, 0xdb, 0x6d, 0xbb, 0x76, 0xed, 0x9c, 0x88 },
-};
-
-//
-// COLORED_PATTERNS - 16 hex bytes per pattern (see Fish.ipynb)
-//
-#define NUM_COLORED_PATTERNS 8   // Total number of colored patterns
-const uint8_t colored_pattern_matrix[][16] = {
-  { 0xff, 0x63, 0x67, 0x25, 0x8d, 0x82, 0x72, 0x8d, 0x8f, 0x27, 0x36, 0x3c, 0x98, 0xc9, 0xc9, 0xc0 },
-  { 0xaa, 0x1b, 0xe, 0x40, 0x6, 0xce, 0x40, 0x1, 0xb0, 0xe4, 0x6, 0xc3, 0x9b, 0x0, 0xb9, 0x0 },
-  { 0x55, 0xff, 0xb7, 0x7f, 0xbb, 0xf7, 0xff, 0xe7, 0xbe, 0xfb, 0xef, 0x7f, 0x7f, 0xa5, 0xff, 0x80 },
-  { 0xaa, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xb9, 0xbe, 0xbf, 0xff, 0x40 },
-  { 0x55, 0x0, 0x0, 0x20, 0x0, 0x40, 0xcc, 0x80, 0x3, 0x1, 0x0, 0x2, 0x4, 0x8, 0x53, 0x0 },
-  { 0xff, 0xd5, 0xf6, 0x9f, 0x62, 0x76, 0x9, 0x60, 0x26, 0xaa, 0x95, 0x5b, 0xeb, 0x9c, 0xa3, 0x40 },
-  { 0xff, 0x55, 0x5f, 0xf7, 0xea, 0xfa, 0xa, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1a, 0xa, 0x40 },
-  { 0xff, 0xd1, 0xf4, 0x1f, 0x48, 0x7d, 0x7, 0xd2, 0x1f, 0x41, 0xf4, 0x7d, 0x7e, 0xf5, 0xa5, 0x80 },
-};
-
 #define NUM_RINGS 6   // Total number of rings
-const uint8_t ring_matrix[][8] = {
-  { 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0 },
-  { 0x0, 0x0, 0x0, 0xc2, 0x86, 0x0, 0x0, 0x0 },
-  { 0x0, 0x0, 0x71, 0x24, 0x49, 0x38, 0x0, 0x0 },
-  { 0x0, 0x3c, 0x8a, 0x18, 0x30, 0xc7, 0xc0, 0x0 },
-  { 0xf, 0xc3, 0x4, 0x0, 0x0, 0x0, 0x38, 0x0 },
-  { 0xf0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7, 0xf8 },
-};
+#define NUM_PATTERNS 19   // Total number of patterns
 
 //
 // Pixel neighbors
@@ -268,38 +218,68 @@ void setup() {
 
   delay( 3000 ); // power-up safety delay
 
+  pinMode(DATA_PIN, OUTPUT);
+  pinMode(CLOCK_PIN, OUTPUT);
+
   randomSeed(analogRead(0));
   
-  Serial.begin(9600);
-  Serial.println("Start");  // Serial: For debugging
-  Serial1.begin(9600);  // Serial1: xBee port
-  Serial2.begin(9600);  // Serial2: Bluetooth serial (ArduinoBlue)
+  Serial.begin(115200);
+  Serial.println("Start");
   
-  FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);
-  FastLED.setBrightness( BRIGHTNESS );
-
-  setBothChannelsSmallCycles(0);
+  FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.setBrightness( bright );
 
   for (uint8_t i = 0; i < DUAL; i++) {
-    led[i].setCoordMap(MAX_YCOORD, coords);  // x,y grid of cones
+    led[i].setCoordMap(FISH_HEIGHT, coords);  // x,y grid of cones
     led[i].setNeighborMap(neighbors);  // 6 neighbors for every pixel
-    led[i].fillBlack();
+    shows[i].fillForeBlack();
     led[i].push_frame();
     shows[i] = Shows(&led[i]);  // Show library - reinitialized for led mappings
-    shows[i].setColorSpeedMinMax(2, 10); // Speed up color changing
+    shows[i].setColorSpeedMinMax(show_speed);
+    shows[i].setWaitRange(show_speed);
+  }
+  
+  // Start Channel B offset at halfway through show
+  shows[CHANNEL_B].setSmallCycle(max_small_cycle / 2);
+
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+    led_buffer[i] = CHSV(0, 0, 0);
   }
 
   if (ONLY_RED) {  // (ArduinoBlue)
     hue_start = 192;
     hue_width = 124;
   }
+
+  //mesh.setDebugMsgTypes( ERROR | MESH_STATUS | CONNECTION | SYNC | COMMUNICATION | GENERAL | MSG_TYPES | REMOTE ); // all types on
+  mesh.setDebugMsgTypes( ERROR | STARTUP );  // set before init() so that you can see startup messages
+
+  mesh.init( MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT );
+  mesh.onReceive(&receivedCallback);
+  mesh.onNewConnection(&newConnectionCallback);
+  mesh.onChangedConnections(&changedConnectionCallback);
+  mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
+
+  userScheduler.addTask(taskUpdateLeds);
+  taskUpdateLeds.enable();
 }
 
 //
 // loop
 //
-void loop() { 
+void loop() {
 
+  userScheduler.execute();  // Essential!
+  if (ARE_CONNECTED) {
+    mesh.update();
+  }
+}
+
+//
+// update leds - Moved to a task-scheduled event
+//
+void updateLeds() {
+  
   for (uint8_t i = 0; i < DUAL; i++) {
       
     switch (current_show[i]) {
@@ -338,47 +318,34 @@ void loop() {
         shows[i].bands();
         break;
       case 11:
-        vert_back_forth_dots(i);
-        break;
-      case 12:
         vert_back_forth_bands(i);
         break;
-      case 13:
+      case 12:
         vert_back_forth_colors(i);
         break;
-      case 14:
-        horiz_back_forth_dots(i);
-        break;
-      case 15:
+      case 13:
         horiz_back_forth_bands(i);
         break;
-      case 16:
+      case 14:
         horiz_back_forth_colors(i);
         break;
-      case 17:
-        diag_back_forth_dots(i);
-        break;
-      case 18:
+      case 15:
         diag_back_forth_bands(i);
         break;
       default:
         diag_back_forth_colors(i);
         break;
     }
-    
     shows[i].morphFrame();  // 1. calculate interp_frame 2. adjust palette
   }
 
-  check_phone();  // Check the phone settings (ArduinoBlue)
-  update_leds();  // push the interp_frames on to the led
   morph_channels(get_intensity(CHANNEL_A));  // morph together the 2 leds channels and deposit on to Channel_A
   unify_head_tail();
+  // adj_brightess();  // Limit brightness to conserve power - hope 6V power supplies fix the flickering
   FastLED.show();  // Update the display
   advance_clocks();  // advance the cycle clocks and check for next show
-  speak_and_hear();  // speak out or hear in signals
-  
-  delay(DELAY_TIME); // The only delay
 }
+
 
 //
 // advance_clocks
@@ -386,14 +353,24 @@ void loop() {
 void advance_clocks() {
   for (uint8_t i = 0; i < DUAL; i++) {
     shows[i].advanceClock();
-    if (shows[i].getSmallCycle() >= (MAX_SMALL_CYCLE - 1) && !is_listening()) {
-      next_show(i);
-      pick_next_show(i);
+    if (shows[i].getSmallCycle() >= max_small_cycle) { 
+      if (!ARE_CONNECTED || is_lost || (ARE_CONNECTED && IS_SPEAKING)) {
+        next_show(i);
+        pick_next_show(i);
+      }
     }
-  }
-  
-  if (curr_lightning > 0 ) {  // (ArduinoBlue)
-    curr_lightning--; // Reduce the current bolt
+    if (ARE_CONNECTED) {
+      if (IS_SPEAKING) {
+        uint32_t smallCycle = shows[i].getSmallCycle();
+        if ((smallCycle <= MESSAGE_REPEAT * MESSAGE_SPACING) && (smallCycle % MESSAGE_SPACING == 0)) {
+          sendMessage(i);  // send message to mesh if connected and speaking on particular small cycles
+        }
+      } else {
+        if (last_connection++ > MAX_SILENT_TIME) {
+          is_lost = true;
+        }
+      }
+    }
   }
 }
 
@@ -401,22 +378,17 @@ void advance_clocks() {
 // next_show - dependent on channel i
 //
 void next_show(uint8_t i) {
-  led[i].fillBlack();
   led[i].push_frame();
   shows[i].resetAllClocks();
-  
   shows[i].turnOnMorphing();
-  shows[i].setWaitRange(2, 22, 20);
-  
-//  log_status(i);  // For debugging
+  shows[i].setWaitRange(show_speed);
+  shows[i].setColorSpeedMinMax(show_speed);
 }
 
 //
 // pick_next_show - dependent on channel i
 //
 void pick_next_show(uint8_t i) {
-  if (i == CHANNEL_A) { setBothChannelsSmallCycles(0); }
-  
   // Switch between a patterns show and all the other shows
   current_pattern[i] = random8(NUM_PATTERNS);
   
@@ -427,7 +399,8 @@ void pick_next_show(uint8_t i) {
   } else {
     current_show[i] = 0;
   }
-  
+
+  mask_pattern[i] = pick_random_mask(i);
 //  current_show[i] = (current_show[i] + 1) % NUM_SHOWS;  // For debugging
   shows[i].pickRandomColorSpeeds();
   shows[i].pickRandomWait();
@@ -438,272 +411,111 @@ void pick_next_show(uint8_t i) {
   shows[i].setBackColor(shows[other_channel].getBackColor());
 }
 
-////// Speaking
-
-void speak_and_hear() {
-  if (ARE_CONNECTED && IS_SPEAKING) { speak_commands(); }
-  if (ARE_CONNECTED && !IS_SPEAKING) { hear_signal(); }  
-}
-
-boolean is_listening() {
-  return (ARE_CONNECTED && !IS_SPEAKING && !is_lost);
-}
-
-void speak_commands() {
-  for (uint8_t i = 0; i < DUAL; i++) {  // Send one channel, then the next
-    if (shows[i].getMorph() == 0) {
-      speak_channel_commands(i);
-    }
-  }
-}
-
-void speak_channel_commands(uint8_t i) {
-  // Speak all the commands for a particular channel
-  uint8_t m = 0;  // where we are in the send-out message string
-
-  m = speak_start(m);
-  m = speak_channel(i, m);  // Send the channel A or B prompt
-  
-  m = speak_command(COMMAND_SM_CYCLE, shows[CHANNEL_A].getSmallCycle(), m);
-  m = speak_command(COMMAND_FORE, shows[i].getForeColor(), m);
-  m = speak_command(COMMAND_BACK, shows[i].getBackColor(), m);
-  m = speak_command(COMMAND_SHOW, current_show[i], m);
-  m = speak_command(COMMAND_PATTERN, current_pattern[i], m);
-  m = speak_command(COMMAND_WAIT, shows[i].getWait(), m);
-  
-  message[m++] = COMMAND_PERIOD;  // Terminate message with period character
-  message[m++] = '\0';  // Terminate message with null (new-line) character
-  Serial1.print(message);  // Only done once
-  // Serial.println(message);  // For debugging
-}
-
-void speak_arduinoblue_commands() {
-  uint8_t m = 0;  // where we are in the send-out message string
-
-  m = speak_start(m);
-  m = speak_command(COMMAND_BRIGHTNESS, BRIGHTNESS, m);
-  m = speak_command(COMMAND_PALETTE, hue_start, m);
-  m = speak_command(COMMAND_PAL_WIDTH, hue_width, m);
-  m = speak_command(COMMAND_SPEED, DELAY_TIME, m);
-  m = speak_command(COMMAND_FADE, FADE_TIME, m);
-  m = speak_command(COMMAND_BOLT, curr_lightning, m);
-  
-  message[m++] = COMMAND_PERIOD;  // Terminate message with null character
-  message[m++] = '\0';  // Terminate message with null character
-  Serial1.print(message);  // Only done once
-//  Serial.println(message);  // For debugging
-}
-
-uint8_t speak_start(uint8_t m) {
-  message[m++] = COMMAND_START;
-  return m;
-}
-
-uint8_t speak_command(char cmd, int value, uint8_t m) {
-  message[m++] = cmd;
-
-  String value_str = String(value);
-  for (uint8_t i = 0; i < value_str.length(); i++) {
-    message[m++] = value_str[i];
-  }
-
-  message[m++] = COMMAND_COMMA;
-  return m;
-}
-
-uint8_t speak_channel(int i, uint8_t m) {
-  char command_channel = (i == 0) ? COMMAND_CHANNEL_A : COMMAND_CHANNEL_B ;
-  message[m++] = command_channel;
-  return m;
-}
-
-////// Hearing
-
-void hear_signal() {
-  if (Serial1.available()) {  // Heard a signal!
-    ResetLostCounter();
-    boolean msg_received = GetMessage(message);  // Load global message buffer by pointer
-    if (msg_received) {
-      // Serial.println(message);  // For debugging
-      ProcessMessage(message);
-    }
+uint8_t pick_random_mask(uint8_t i) {
+  // 2 bit identities x 2 color/black = 4 possibilities
+  if (current_show[i] != 0 && random8(1, 4) == 1) {
+    return random8(1, 5);
   } else {
-    if (!is_lost && (millis() - last_connection > MAX_SILENT_TIME) ) {
-      is_lost = true;
-    }
+    return 0;
   }
 }
 
-//
-// ResetLostCounter - board is not lost
-//
-void ResetLostCounter() {
+
+////// Speaking and Hearing
+
+String getReadings (uint8_t c) {
+  JSONVar jsonReadings;
+
+  jsonReadings["type"] = MESH_MESSAGE;
+  jsonReadings["c"] = c;
+  jsonReadings["cycle"] = (const double)shows[c].getSmallCycle();
+  jsonReadings["f"] = shows[c].getForeColor();
+  jsonReadings["fspd"] = shows[c].getForeColorSpeed();
+  jsonReadings["b"] = shows[c].getBackColor();
+  jsonReadings["bspd"] = shows[c].getBackColorSpeed();
+  jsonReadings["s"] = current_show[c];
+  jsonReadings["w"] = shows[c].getWait();
+  jsonReadings["p"] = current_pattern[c];
+
+  message = JSON.stringify(jsonReadings);
+  return message;
+}
+
+void sendMessage (uint8_t c) {
+  String msg = getReadings(c);
+  mesh.sendBroadcast(msg);
+}
+
+void receivedCallback( uint32_t from, String &msg ) {
+  JSONVar myObject = JSON.parse(msg.c_str());
+
+  // Check to see whether a phone or mesh command
+  if (int(myObject["type"]) == PHONE_MESSAGE) {
+    processPhoneMessage(myObject);
+  
+  } else {
+    int c = int(myObject["c"]);
+    shows[c].setSmallCycle(double(myObject["cycle"]));
+    shows[c].setForeColor(int(myObject["f"]));
+    shows[c].setForeColorSpeed(int(myObject["fspd"]));
+    shows[c].setBackColor(int(myObject["b"]));
+    shows[c].setBackColorSpeed(int(myObject["bspd"]));
+    shows[c].setWait(int(myObject["w"]));
+    current_pattern[c] = int(myObject["p"]);
+    
+    int show_number = int(myObject["s"]);
+    if (current_show[c] != show_number) {
+      current_show[c] = show_number % NUM_SHOWS;
+      next_show(c);
+    }
+  }
+  
+  last_connection = 0;
   is_lost = false;
-  last_connection = millis();
 }
 
-//
-// GetMessage - pulls the whole serial buffer until a period
-//
-boolean GetMessage(char* message) {
-  char tmp;
-  boolean have_start_signal = false;
-  uint8_t tries = 0;
-  uint16_t MAX_TRIES = 2000;  // Adjust this
-  uint8_t i = 0;
+void processPhoneMessage(JSONVar myObject) {
+  return;  // Not implemented for Autumn Lights Festival
 
-  while (tries++ < MAX_TRIES) {
-    if (Serial1.available()) {
-      tries = 0;
-      tmp = Serial1.read();
-//      Serial.print(tmp);  // For debugging
+  /*
+  int value = int(myObject["value"]);
+  Serial.printf("Received control value of %d\n", value);
 
-      if (!have_start_signal) {
-        if (tmp == COMMAND_START) { 
-          have_start_signal = true;  // Start of message
-        }
-      } else {
-        if (tmp == COMMAND_PERIOD) {
-          message[i++] = tmp;  // End of message
-          message[i++] = '\0';  // End of string
-          return true;
-        }  
-        if (isAscii(tmp)) {
-          message[i++] = tmp;
-          if (i >= MAX_MESSAGE) {
-            Serial.println("Message too long!");  // Ran out of message space
-            return false;
-          }
-        }
-      }
-    }
-  }
-  Serial.println("Ran out of tries");
-  return false;  // discard message
-}
-
-//
-// ProcessMessage
-//
-void ProcessMessage(char* message) {
-  uint8_t i = 0;
-  uint8_t channel = 0;  // Default to channel 0
-  char cmd;
-  
-  while (i < MAX_MESSAGE) {
-    
-    cmd = message[i];  // Get one-letter command
-
-    if (cmd == COMMAND_PERIOD) {
-      return;
-    } else if (!isAscii(cmd)) {
-      return;
-    } else if (cmd == COMMAND_CHANNEL_A) {
-      i++;
-      channel = 0;
-    } else if (cmd == COMMAND_CHANNEL_B) {
-      i++;
-      channel = 1;
-    } else if (isAlpha(cmd)) {
-      for (uint8_t j = 0; j < MAX_NUM; j++) { 
-        number_buffer[j] = EMPTY_CHAR;  // Clear number buffer
-      }
-      
-      int numsiz = ReadNum(message, i+1, number_buffer);  // Read in the number
-      i = i + 2 + numsiz; // 2 = leap beginning command and trailing comma
-      
-      ExecuteOrder(cmd, atoi(number_buffer), channel);
-    } else {
-      return;  // Garbage
-    }
-  }
-}
-
-//
-// ReadNum - reads numbers in a string
-//
-uint8_t ReadNum(char* msg, uint8_t place, char* number) {
-  uint8_t i = 0; // Start of number
-  char tmp;
-  
-  while (i < MAX_NUM) {
-    tmp = msg[place];
-    if (tmp == COMMAND_COMMA) {
-      return (i);
-    } else {
-      number[i] = msg[place];
-      i++;
-      place++;
-      if (place >= MAX_MESSAGE) { 
-        break;  
-      }
-    }
-  }
-  Serial.println("Number too long");
-  return (0); // Number too long
-}
-
-//
-// Execute Order - execute a letter command followed by a number
-//
-void ExecuteOrder(char command, uint16_t value, uint8_t i) {
-      
-  switch (command) {
-    
-    case COMMAND_FORE:
-      shows[i].setForeColor(value);
+  switch (int(myObject["param"])) {
+    case BRIGHTNESS_COMMAND:
+      bright = value;
+      FastLED.setBrightness( bright );
       break;
-    
-    case COMMAND_BACK:
-      shows[i].setBackColor(value);
-      break;
-
-    case COMMAND_BRIGHTNESS:
-      BRIGHTNESS = value;
-      FastLED.setBrightness( value );
-      break;
-    
-    case COMMAND_PALETTE:
+    case HUE_COMMAND:
       hue_start = value;
       break;
-    
-    case COMMAND_PAL_WIDTH:
+    case HUE_WIDTH_COMMAND:
       hue_width = value;
       break;
-
-    case COMMAND_SPEED:
-      DELAY_TIME = value;
+    case SPEED_COMMAND:
+      show_speed = value;
       break;
-
-    case COMMAND_FADE:
-      FADE_TIME = value;
+    case SHOW_DURATION_COMMAND:
+      show_duration = map8(value, 10, 180);  // min = 10 seconds; max = 3 minutes
+      max_small_cycle = (show_duration * 2 * (1000 / DELAY_TIME));  // update max_small_cycle
       break;
-
-    case COMMAND_BOLT:
-      curr_lightning = value;
-      break;
-    
-    case COMMAND_WAIT:
-      if (shows[i].getWait() != value) { 
-        shows[i].setWait(value);
-      }
-      break;
-    
-    case COMMAND_SHOW:  // Show
-      if (current_show[i] != value) {
-        current_show[i] = value;
-        next_show(i);
-      }
-      break;
-
-    case COMMAND_SM_CYCLE: // small_cycle - always channel 0
-      setBothChannelsSmallCycles(value);
-      break;
-
-    case COMMAND_PATTERN:  // Pattern
-      current_pattern[i] = value;
+    case FADE_COMMAND:
+      fade_amount = value;  // 0-255
       break;
   }
+  */
+}
+
+void newConnectionCallback(uint32_t nodeId) {
+  Serial.printf("New Connection, nodeId = %u\n", nodeId);
+}
+
+void changedConnectionCallback() {
+  Serial.printf("Changed connections\n");
+}
+
+void nodeTimeAdjustedCallback(int32_t offset) {
+  Serial.printf("Adjusted time %u. Offset = %d\n", mesh.getNodeTime(),offset);
 }
 
 ////// End Speaking & Hearing
@@ -754,7 +566,7 @@ void patternsBW(uint8_t c) {
     if (get_bit_from_pattern_number(i, current_pattern[c])) {
       shows[c].setPixeltoHue(i, FISH_HUE);
     } else {
-      shows[c].setPixeltoBackColor(i);
+      shows[c].setPixeltoForeBlack(i);
     }
   }
 }
@@ -764,7 +576,7 @@ void patterns2(uint8_t c) {
     if (get_bit_from_pattern_number(i, current_pattern[c])) {
       shows[c].setPixeltoForeColor(i);
     } else {
-      shows[c].setPixeltoBlack(i);
+      shows[c].setPixeltoForeBlack(i);
     }
   }
 }
@@ -795,10 +607,10 @@ void vert_back_forth_dots(uint8_t c) {
   uint8_t temp_x;
   uint16_t cycle = shows[c].getCycle();
 
-  led[c].fillBlack();
+  shows[c].fillForeBlack();
   
-  for (uint8_t x = 0; x < MAX_XCOORD; x++) {
-    for (uint8_t y = 1; y < MAX_YCOORD; y++) {  // Don't light the head (row 0)
+  for (uint8_t x = 0; x < FISH_WIDTH; x++) {
+    for (uint8_t y = 0; y < FISH_HEIGHT; y++) {
       temp_x = x + FISH_XGRID;
       temp_x = (y % 2) ? temp_x : MAX_XGRID - temp_x - 1;
       if ((temp_x + cycle) % MAX_XGRID == 0) {
@@ -816,8 +628,8 @@ void vert_back_forth_bands(uint8_t c) {
   uint8_t temp_x, intensity;
   uint16_t cycle = shows[c].getCycle();
   
-  for (uint8_t x = 0; x < MAX_XCOORD; x++) {
-    for (uint8_t y = 1; y < MAX_YCOORD; y++) {  // Don't light the head (row 0)
+  for (uint8_t x = 0; x < FISH_WIDTH; x++) {
+    for (uint8_t y = 0; y < FISH_HEIGHT; y++) {
       temp_x = x + FISH_XGRID;
       temp_x = (y % 2) ? temp_x : MAX_XGRID - temp_x - 1;
       temp_x = (temp_x + cycle) % MAX_XGRID;
@@ -835,8 +647,8 @@ void vert_back_forth_colors(uint8_t c) {
   uint8_t temp_x, hue;
   uint16_t cycle = shows[c].getCycle();
   
-  for (uint8_t x = 0; x < MAX_XCOORD; x++) {
-    for (uint8_t y = 0; y < MAX_YCOORD; y++) {
+  for (uint8_t x = 0; x < FISH_WIDTH; x++) {
+    for (uint8_t y = 0; y < FISH_HEIGHT; y++) {
       temp_x = x + FISH_XGRID;
       temp_x = (y % 2) ? temp_x : MAX_XGRID - temp_x - 1;
       temp_x = (temp_x + cycle) % MAX_XGRID;
@@ -853,13 +665,13 @@ void horiz_back_forth_dots(uint8_t c) {
   uint8_t temp_y;
   uint16_t cycle = shows[c].getCycle();
 
-  led[c].fillBlack();
+  shows[c].fillForeBlack();
   
-  for (uint8_t x = 0; x < MAX_XCOORD; x++) {
-    for (uint8_t y = 1; y < MAX_YCOORD; y++) {  // Don't light the head (row 0)
+  for (uint8_t x = 0; x < FISH_WIDTH; x++) {
+    for (uint8_t y = 0; y < FISH_HEIGHT; y++) {
       temp_y = y + FISH_YGRID;
       temp_y = (x % 2) ? temp_y : MAX_YGRID - temp_y - 1;
-      if ((temp_y + cycle) % MAX_XGRID == 0) {
+      if ((temp_y + cycle) % MAX_YGRID == 0) {
         shows[c].setPixeltoForeColor(led[c].getLedFromCoord(x,y));
       }
     }
@@ -874,8 +686,8 @@ void horiz_back_forth_bands(uint8_t c) {
   uint8_t temp_y, intensity;
   uint16_t cycle = shows[c].getCycle();
   
-  for (uint8_t x = 0; x < MAX_XCOORD; x++) {
-    for (uint8_t y = 1; y < MAX_YCOORD; y++) {  // Don't light the head (row 0)
+  for (uint8_t x = 0; x < FISH_WIDTH; x++) {
+    for (uint8_t y = 0; y < FISH_HEIGHT; y++) {
       temp_y = y + FISH_YGRID;
       temp_y = (x % 2) ? temp_y : MAX_YGRID - temp_y - 1;
       temp_y = (temp_y + cycle) % MAX_YGRID;
@@ -893,8 +705,8 @@ void horiz_back_forth_colors(uint8_t c) {
   uint8_t temp_y, hue;
   uint16_t cycle = shows[c].getCycle();
   
-  for (uint8_t x = 0; x < MAX_XCOORD; x++) {
-    for (uint8_t y = 0; y < MAX_YCOORD; y++) {
+  for (uint8_t x = 0; x < FISH_WIDTH; x++) {
+    for (uint8_t y = 0; y < FISH_HEIGHT; y++) {
       temp_y = y + FISH_YGRID;
       temp_y = (x % 2) ? temp_y : MAX_YGRID - temp_y - 1;
       temp_y = (temp_y + cycle) % MAX_YGRID;
@@ -911,15 +723,15 @@ void diag_back_forth_dots(uint8_t c) {
   uint8_t temp_x, temp_y;
   uint16_t cycle = shows[c].getCycle();
 
-  led[c].fillBlack();
+  shows[c].fillForeBlack();
   
-  for (uint8_t x = 0; x < MAX_XCOORD; x++) {
-    for (uint8_t y = 1; y < MAX_YCOORD; y++) {  // Don't light the head (row 0)
+  for (uint8_t x = 0; x < FISH_WIDTH; x++) {
+    for (uint8_t y = 0; y < FISH_HEIGHT; y++) {
       temp_x = x + FISH_XGRID;
       temp_y = y + FISH_YGRID;
       temp_x = (y % 2) ? temp_x : MAX_XGRID - temp_x - 1;
       temp_y = (x % 2) ? temp_y : MAX_YGRID - temp_y - 1;
-      if ((temp_x + temp_y + cycle) % MAX_YGRID == 0) {
+      if ((temp_x + temp_y + cycle) % MAX_YGRID < 3) {
         shows[c].setPixeltoForeColor(led[c].getLedFromCoord(x,y));
       }
     }
@@ -934,8 +746,8 @@ void diag_back_forth_bands(uint8_t c) {
   uint8_t temp_x, temp_y, temp, intensity;
   uint16_t cycle = shows[c].getCycle();
   
-  for (uint8_t x = 0; x < MAX_XCOORD; x++) {
-    for (uint8_t y = 1; y < MAX_YCOORD; y++) {  // Don't light the head (row 0)
+  for (uint8_t x = 0; x < FISH_WIDTH; x++) {
+    for (uint8_t y = 0; y < FISH_HEIGHT; y++) {
       temp_x = x + FISH_XGRID;
       temp_y = y + FISH_YGRID;
       temp_x = (y % 2) ? temp_x : MAX_XGRID - temp_x - 1;
@@ -955,8 +767,8 @@ void diag_back_forth_colors(uint8_t c) {
   uint8_t temp_x, temp_y, temp, hue;
   uint16_t cycle = shows[c].getCycle();
   
-  for (uint8_t x = 0; x < MAX_XCOORD; x++) {
-    for (uint8_t y = 0; y < MAX_YCOORD; y++) {
+  for (uint8_t x = 0; x < FISH_WIDTH; x++) {
+    for (uint8_t y = 0; y < FISH_HEIGHT; y++) {
       temp_x = x + FISH_XGRID;
       temp_y = y + FISH_YGRID;
       temp_x = (y % 2) ? temp_x : MAX_XGRID - temp_x - 1;
@@ -1061,11 +873,42 @@ void warp2(uint8_t i) {
 // morph_channels - morph together the 2 chanels and update the LEDs
 //
 void morph_channels(uint8_t fract) {
+
   for (int i = 0; i < NUM_LEDS; i++) {
-    CHSV color = led[CHANNEL_A].getInterpHSV(leds_buffer[CHANNEL_B][i], 
-                                             leds_buffer[CHANNEL_A][i], 
-                                             fract);  // interpolate a + b channels
-    leds[i] = lightning(narrow_palette(color));  // (ArduinoBlue)
+
+//    CHSV color_b = mask(led[CHANNEL_B].getInterpFrameColor(i), i, CHANNEL_B);  // Masking
+//    CHSV color_a = mask(led[CHANNEL_A].getInterpFrameColor(i), i, CHANNEL_A);
+    
+    CHSV color_b = led[CHANNEL_B].getInterpFrameColor(i);
+    CHSV color_a = led[CHANNEL_A].getInterpFrameColor(i);
+    CHSV color = led[CHANNEL_A].getInterpHSV(color_b, color_a, fract);  // interpolate a + b channels
+    color = narrow_palette(color);
+
+    if (SMOOTHING > 0) {
+      color = led[CHANNEL_A].smooth_color(led_buffer[i], color, SMOOTHING);  // smoothing
+    }
+
+    leds[i] = color;
+    led_buffer[i] = color;
+  }
+}
+
+//
+// mask
+//
+CHSV mask(CHSV color, uint8_t i, uint8_t channel) {
+  if (mask_pattern[channel] == 0 || current_show[i] == 0) {
+    return color;  // no masking
+  }
+  uint8_t mask_value = mask_pattern[channel] - 1;
+  boolean value = get_bit_from_pattern_number(i, current_pattern[channel]);
+  if (mask_value % 2 == 0) {
+    value = !value;
+  }
+  if (value) {
+    return (mask_value > 2) ? shows[channel].getBackBlack() : led[channel].wheel(shows[channel].getBackColor());
+  } else {
+    return color;
   }
 }
 
@@ -1075,40 +918,47 @@ void morph_channels(uint8_t fract) {
 uint8_t get_intensity(uint8_t i) {
   uint8_t intensity;  // 0 = Off, 255 = full On
   uint16_t small_cycle = shows[i].getSmallCycle();
+  uint16_t fade_cycles =  (map8(fade_amount, 0, show_duration) * 1000 / DELAY_TIME);  // cycles to fade in + out
 
-  // Similar logic to check_fades (deprecated)
-  if (small_cycle < FADE_CYCLES) {
-    intensity = map(small_cycle, 0, FADE_CYCLES, 0, 255);  // rise
-  } else if (small_cycle <= (MAX_SMALL_CYCLE / 2)) {
+  if (small_cycle < fade_cycles) {
+    intensity = map(small_cycle, 0, fade_cycles, 0, 255);  // rise
+  } else if (small_cycle <= (max_small_cycle / 2)) {
     intensity = 255;  // Show is 100%
-  } else if (small_cycle <= ((MAX_SMALL_CYCLE / 2) + FADE_CYCLES)) {
-    intensity = map(small_cycle - (MAX_SMALL_CYCLE / 2), 0, FADE_CYCLES, 255, 0);  // decay
+  } else if (small_cycle <= ((max_small_cycle / 2) + fade_cycles)) {
+    intensity = map(small_cycle - (max_small_cycle / 2), 0, fade_cycles, 255, 0);  // decay
   } else {
     intensity = 0;
   }
 
-  return intensity;
+  return ease8InOutApprox(intensity);
 }
 
-void setBothChannelsSmallCycles(uint16_t channel_a_small_cycle) {
-  // Start Channel B offset at halfway through show
-  uint32_t channel_b_small_cycle = (channel_a_small_cycle + (MAX_SMALL_CYCLE / 2)) % MAX_SMALL_CYCLE;
-  shows[CHANNEL_A].setSmallCycle(channel_a_small_cycle);
-  shows[CHANNEL_B].setSmallCycle(channel_b_small_cycle);
-}
-
-//// End DUAL SHOW LOGIC
-
 //
-// update_leds - push the interp_frame on to the leds
+// adjust brightness - put a cap on maximum brightness to prevent flickering
 //
-void update_leds() {
-  for (uint8_t c = 0; c < DUAL; c++) {
-    for (uint8_t i = 0; i < NUM_LEDS; i++) {
-      leds_buffer[c][i] = led[c].getInterpFrameColor(i);
+void adj_brightess() {
+  uint8_t brightness_step_size = 5;
+  uint32_t lumens = 0;
+
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+    lumens += leds[i].r;
+    lumens += leds[i].g;
+    lumens += leds[i].b;
+  }
+  lumens = curr_bright * lumens / 255;  // total lumens adjusted by brightess setting
+  
+  if (lumens > MAX_LUMENS) {  // we are too bright
+    curr_bright -= brightness_step_size;  // Turn down brightness
+    FastLED.setBrightness( curr_bright );
+  } else {
+    if (bright > curr_bright) {
+      curr_bright = min(bright, qadd8(curr_bright, brightness_step_size));  // Turn up brightness
+      FastLED.setBrightness( curr_bright );
     }
   }
 }
+
+//// End DUAL SHOW LOGIC
 
 //
 // narrow_palette - confine the color range (ArduinoBlue)
@@ -1123,56 +973,6 @@ CHSV narrow_palette(CHSV color) {
 //
 CHSV rgb_to_hsv( CRGB color) {
   return led[0].rgb_to_hsv(color);  // static method
-}
-
-//
-// lightning - ramp all pixels quickly up to white (down sat & up value) and back down
-//
-CHSV lightning(CHSV color) {  // (ArduinoBlue)
-  if (curr_lightning > 0) {
-    uint8_t increase = 255 - cos8( map(curr_lightning, 0, BOLT_TIME, 0, 255));
-    color.s -= increase;
-    color.v += increase;
-  }
-  return color;
-}
-
-//
-// check_phone - poll the phone for updated values  (ArduinoBlue)
-//
-void check_phone() {
-  int8_t sliderId = phone.getSliderId();  // ID of the slider moved
-  int8_t buttonId = phone.getButton();  // ID of the button
-
-  if (sliderId != -1) {
-    int16_t sliderVal = phone.getSliderVal();  // Slider value goes from 0 to 200
-    sliderVal = map(sliderVal, 0, 200, 0, 255);  // Recast to 0-255
-
-    switch (sliderId) {
-      case BRIGHTNESS_SLIDER:
-        BRIGHTNESS = sliderVal;
-        FastLED.setBrightness( BRIGHTNESS );
-        break;
-      case HUE_SLIDER:
-        hue_start = sliderVal;
-        break;
-      case HUE_WIDTH_SLIDER:
-        hue_width = sliderVal;
-        break;
-      case SPEED_SLIDER:
-        DELAY_TIME = map8(sliderVal, 10, 100);
-        break;
-      case FADE_TIME_SLIDER:
-        FADE_TIME = map8(sliderVal, 0, SHOW_DURATION);
-        break;
-    }
-    speak_arduinoblue_commands();
-  }
-  
-  if (buttonId == BAM_BUTTON) { 
-    curr_lightning = BOLT_TIME;
-    speak_arduinoblue_commands();
-  }
 }
 
 // 
@@ -1193,16 +993,59 @@ void unify_head_tail() {
 //
 // Unpack hex into bits
 boolean get_bit_from_ring(uint8_t n, uint8_t ring_number) {
+  uint8_t ring_matrix[][8] = {
+    { 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0 },
+    { 0x0, 0x0, 0x0, 0xc2, 0x86, 0x0, 0x0, 0x0 },
+    { 0x0, 0x0, 0x71, 0x24, 0x49, 0x38, 0x0, 0x0 },
+    { 0x0, 0x3c, 0x8a, 0x18, 0x30, 0xc7, 0xc0, 0x0 },
+    { 0xf, 0xc3, 0x4, 0x0, 0x0, 0x0, 0x38, 0x0 },
+    { 0xf0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7, 0xf8 },
+  };
   uint8_t pattern_byte = ring_matrix[ring_number][(n / 8)];
   return (pattern_byte & (1 << (7 - (n % 8)) ));
 }
 
 boolean get_bit_from_pattern_number(uint8_t n, uint8_t pattern_number) {
+  // PATTERNS - 8 hex bytes per pattern (see Fish.ipynb)
+  uint8_t pattern_matrix[][8] = {
+    { 0xa, 0xab, 0x56, 0xa5, 0x4a, 0xa9, 0x55, 0x50 },
+    { 0xd, 0x99, 0x8c, 0xcc, 0x66, 0x6d, 0xaa, 0xd0 },
+    { 0xf2, 0x18, 0x20, 0xc1, 0x6, 0x11, 0x97, 0xf8 },
+    { 0xf2, 0x18, 0x71, 0xe5, 0x56, 0xbb, 0xd1, 0xe0 },
+    { 0xf2, 0x18, 0x51, 0x24, 0x50, 0x91, 0xa9, 0x20 },
+    { 0xf0, 0x7e, 0x3, 0xf0, 0x1f, 0x83, 0xc4, 0xc8 },
+    { 0xf, 0xc3, 0x26, 0xd9, 0x30, 0xc6, 0x7f, 0x38 },
+    { 0x2, 0x25, 0x25, 0x29, 0x29, 0x12, 0x54, 0xc8 },
+    { 0x8, 0xa4, 0x50, 0xc1, 0x6, 0x2a, 0x42, 0x10 },
+    { 0x8, 0x99, 0x4, 0xc8, 0x29, 0x12, 0x43, 0x30 },
+    
+    { 0xfd, 0xdb, 0x7, 0xf8, 0x36, 0xee, 0x46, 0xd8 },
+    { 0xf2, 0x19, 0xdf, 0x3e, 0xf9, 0xee, 0x6a, 0x10 },
+    { 0xd, 0xe7, 0xdf, 0x3e, 0xf9, 0xee, 0x68, 0x0 },
+    { 0xf0, 0x43, 0x8f, 0x3e, 0xff, 0xc6, 0x6c, 0xc8 },
+    { 0xf3, 0xf8, 0xf, 0xc, 0xfc, 0x80, 0xe3, 0x30 },
+    { 0x3, 0x9d, 0xc7, 0x11, 0xc7, 0x62, 0x19, 0xf8 },
+    { 0xff, 0xe7, 0x8e, 0x1c, 0x79, 0xec, 0x7, 0x38 },
+    { 0xf7, 0x5b, 0x8c, 0xc, 0x76, 0xb9, 0xbb, 0xf0 },
+    { 0xfd, 0xdb, 0x6d, 0xbb, 0x76, 0xed, 0x9c, 0x88 },
+  };
   uint8_t pattern_byte = pattern_matrix[pattern_number][(n / 8)];
   return (pattern_byte & (1 << (7 - (n % 8)) ));
 }
 
 uint8_t get_two_bits_from_pattern_number(uint8_t n, uint8_t pattern_number) {
+  // COLORED_PATTERNS - 16 hex bytes per pattern (see Fish.ipynb)
+  #define NUM_COLORED_PATTERNS 8   // Total number of colored patterns
+  uint8_t colored_pattern_matrix[][16] = {
+    { 0xff, 0x63, 0x67, 0x25, 0x8d, 0x82, 0x72, 0x8d, 0x8f, 0x27, 0x36, 0x3c, 0x98, 0xc9, 0xc9, 0xc0 },
+    { 0xaa, 0x1b, 0xe, 0x40, 0x6, 0xce, 0x40, 0x1, 0xb0, 0xe4, 0x6, 0xc3, 0x9b, 0x0, 0xb9, 0x0 },
+    { 0x55, 0xff, 0xb7, 0x7f, 0xbb, 0xf7, 0xff, 0xe7, 0xbe, 0xfb, 0xef, 0x7f, 0x7f, 0xa5, 0xff, 0x80 },
+    { 0xaa, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xb9, 0xbe, 0xbf, 0xff, 0x40 },
+    { 0x55, 0x0, 0x0, 0x20, 0x0, 0x40, 0xcc, 0x80, 0x3, 0x1, 0x0, 0x2, 0x4, 0x8, 0x53, 0x0 },
+    { 0xff, 0xd5, 0xf6, 0x9f, 0x62, 0x76, 0x9, 0x60, 0x26, 0xaa, 0x95, 0x5b, 0xeb, 0x9c, 0xa3, 0x40 },
+    { 0xff, 0x55, 0x5f, 0xf7, 0xea, 0xfa, 0xa, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1a, 0xa, 0x40 },
+    { 0xff, 0xd1, 0xf4, 0x1f, 0x48, 0x7d, 0x7, 0xd2, 0x1f, 0x41, 0xf4, 0x7d, 0x7e, 0xf5, 0xa5, 0x80 },
+  };
   uint8_t pattern = pattern_number % NUM_COLORED_PATTERNS;
   uint8_t pattern_byte = colored_pattern_matrix[pattern][(n / 4)];
   return ( (pattern_byte >> (2 * (3 - (n % 4)))) & B00000011 );
