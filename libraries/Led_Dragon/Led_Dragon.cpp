@@ -8,7 +8,8 @@
 #include "Led_Dragon.h"  // include this library's description file
 
 #define BLACK  CHSV(0, 0, 0)
-#define XX  255
+#define OFF  255
+#define XX   9999  // Out of bounds
 
 //
 // Constructor
@@ -91,6 +92,13 @@ void Led::dimAllPixels(uint8_t amount)
 }
 
 // This calculates the interpolated frame, but does not update the leds
+void Led::morph_frame(uint8_t fract)
+{
+  for (uint16_t i = 0; i < numLeds; i++) {
+    interp_frame[i] = getInterpHSV(current_frame[i], next_frame[i], fract);
+  }
+}
+/*
 void Led::morph_frame(uint8_t morph, uint8_t total_frames)
 {
   uint8_t fract = map(morph, 0, total_frames, 0, 255);  // 0 - 255
@@ -99,6 +107,7 @@ void Led::morph_frame(uint8_t morph, uint8_t total_frames)
     interp_frame[i] = getInterpHSV(current_frame[i], next_frame[i], fract);
   }
 }
+*/
 
 void Led::push_frame(void)
 {
@@ -370,7 +379,7 @@ CHSV Led::smooth_color(CHSV old_color, CHSV new_color, uint8_t max_change)
 {
   // Should I worry about saturation and value?
   return CHSV(smooth_wrap(old_color.h, new_color.h, max_change),
-              new_color.s,
+              255, // new_color.s,  // try always saturated
               smooth(old_color.v, new_color.v, 20));
 }
 
@@ -379,10 +388,4 @@ CRGB Led::smooth_rgb_color(CRGB old_color, CRGB new_color, uint8_t max_change)
   return CRGB(smooth(old_color.r, new_color.r, max_change),
               smooth(old_color.g, new_color.g, max_change),
               smooth(old_color.b, new_color.b, max_change));
-}
-
-uint16_t Led::getNeighbor(uint8_t x, uint8_t y, uint8_t dir)
-{
-  // IMPLEMENT
-  return x + y;
 }

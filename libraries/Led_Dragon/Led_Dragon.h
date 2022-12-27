@@ -23,7 +23,8 @@ class Led
     void
       dimPixel(uint16_t i, uint8_t amount),
       dimAllPixels(uint8_t amount);
-    void morph_frame(uint8_t morph, uint8_t total_frames);
+    // void morph_frame(uint8_t morph, uint8_t total_frames);
+    void morph_frame(uint8_t fract);
     void push_frame(void);
     void
       setBlur(uint8_t b), turnOffBlur(void);
@@ -31,8 +32,6 @@ class Led
       hasBlur(void);
     void
       addPixelColor(uint16_t i, CHSV c2), addPixelColorNoMap(uint16_t i, CHSV c2);
-    uint16_t
-      getNeighbor(uint8_t x, uint8_t y, uint8_t dir);
     CHSV
       getCurrFrameColor(uint16_t i),
       getNextFrameColor(uint16_t i),
