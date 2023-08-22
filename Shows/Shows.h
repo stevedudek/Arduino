@@ -13,13 +13,11 @@ class Shows
     void
       allOn(void), randomFill(void), twoColor(void),
       randomColors(void), randomOneColorBlack(void), randomTwoColorBlack(void),
-      morphChain(void), sawTooth(void), bands(void),
-      lightWave(void), lightWave(uint8_t spacing),
+      morphChain(void), sawTooth(void), bands(void), confetti(void),
+      lightWave(void),
       lightRunUp(void), bounce(void), bounceGlowing(void), packets(void),
       packets_two(void), plinko(uint8_t start_pos),
       sinelon_fastled(void), bpm_fastled(void), juggle_fastled(void);
-    void
-      lightRunUp_blur(uint16_t cyc), lightWave_blur(uint16_t cyc, uint8_t spacing);
     void
       shuffleLeds(void), shuffleColors(void);
     void
@@ -40,11 +38,13 @@ class Shows
       setBandsBpm(uint8_t bands_min, uint8_t bands_max),
       pickRandomColorSpeeds(void),
       tweakColorSpeeds(void),
+      setColorSpeedMinMax(uint8_t show_speed),
       setColorSpeedMinMax(uint8_t speed_min, uint8_t speed_max),
       pickRandomWait(void),
       tweakWait(void),
       setCycle(uint16_t c), setSmallCycle(uint32_t c),
-      setWait(uint8_t w),
+      setWait(uint8_t w), setWaitAbsolute(uint8_t w),
+      setWaitRange(uint8_t show_speed),
       setWaitRange(uint8_t wait_min, uint8_t wait_max),
       setWaitRange(uint8_t wait_min, uint8_t wait_max, uint8_t num_wait_values),
       makeWaitSlower(uint8_t r), makeWaitFaster(uint8_t r),

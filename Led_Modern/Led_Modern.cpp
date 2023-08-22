@@ -1,14 +1,16 @@
 //
-//  Led.cpp - Handles morphing, RGB/HSV interpolation
+//  Led_Modern.cpp - Handles morphing, RGB/HSV interpolation
+//
+//  Updated clock cycling
 //
 //  USE THIS REPO
 //
 #include <FastLED.h>
 
-#include "Led.h"  // include this library's description file
+#include "Led_Modern.h"  // include this library's description file
 
 #define BLACK  CHSV(0, 0, 0)
-#define XX  255
+#define XX   255  // Out of bounds
 
 //
 // Constructor
@@ -19,15 +21,6 @@ Led::Led(uint8_t i)
 
   current_frame = (CHSV *)calloc(numLeds, sizeof(CHSV));
   next_frame = (CHSV *)calloc(numLeds, sizeof(CHSV));
-  interp_frame = (CHSV *)calloc(numLeds, sizeof(CHSV));
-
-  is_only_red = false;
-
-  is_mapped = false;
-  is_2d_mapped = false;
-  is_neighbor_mapped = false;
-
-  num_neighbors = 6;  // Default to hexagonal
 }
 
 //
@@ -62,16 +55,7 @@ void Led::fillBlack(void)
 void Led::setPixelColor(uint8_t i, CHSV color)
 {
   if (i != XX) {
-    if (is_only_red) {
-      color.h = map8(color.h, 224, 32);
-    }
-    if (hasBlur()) {
-      if (is_black(color)) return;
-      color.v = scale8(color.v, 255 - blur_amount);
-      addPixelColor(i, color);
-    } else {
-      next_frame[lookupLed(i)] = color;
-    }
+    next_frame[lookupLed(i)] = color;
   }
 }
 
@@ -88,16 +72,7 @@ void Led::setPixelBlack(uint8_t i)
 void Led::setPixelColorNoMap(uint8_t i, CHSV color)
 {
   if (i != XX) {
-    if (is_only_red) {
-      color.h = map8(color.h, 224, 32);
-    }
-    if (hasBlur()) {
-      if (is_black(color)) return;
-      color.v = scale8(color.v, 255 - blur_amount);
-      addPixelColorNoMap(i, color);
-    } else {
-      next_frame[i] = color;
-    }
+    next_frame[i] = color;
   }
 }
 
@@ -125,13 +100,18 @@ void Led::dimAllPixels(uint8_t amount)
   }
 }
 
-// This calculates the interpolated frame, but does not update the leds
-void Led::morph_frame(uint8_t morph, uint8_t total_frames)
+void Led::increasePixelHue(uint8_t i, uint8_t increase)
 {
-  uint8_t fract = map(morph, 0, total_frames, 0, 255);  // 0 - 255
+  if (i != XX) {
+    next_frame[i].h += increase;
+  }
+}
 
+// Don't interpolate. Try to force the current frame into next frame with smoothing.
+void Led::smooth_frame(uint8_t max_change)
+{
   for (uint8_t i = 0; i < numLeds; i++) {
-    interp_frame[i] = getInterpHSV(current_frame[i], next_frame[i], fract);
+    current_frame[i] = smooth_color(current_frame[i], next_frame[i], max_change, max_change);
   }
 }
 
@@ -140,21 +120,6 @@ void Led::push_frame(void)
   for (uint8_t i = 0; i < numLeds; i++) {
     current_frame[i] = next_frame[i];
   }
-}
-
-void Led::turnOffBlur(void)
-{
-  blur_amount = 0;
-}
-
-void Led::setBlur(uint8_t b)
-{
-  blur_amount = b;
-}
-
-bool Led::hasBlur(void)
-{
-  return (blur_amount != 0);
 }
 
 void Led::addPixelColor(uint8_t i, CHSV c2)
@@ -195,50 +160,9 @@ CHSV Led::getNextFrameColor(uint8_t i)
   return next_frame[i];
 }
 
-CHSV Led::getInterpFrameColor(uint8_t i)
-{
-  return interp_frame[i];
-}
-
-uint8_t Led::getInterpFrameHue(uint8_t i)
-{
-  return interp_frame[i].h;
-}
-
-uint8_t Led::getInterpFrameSat(uint8_t i)
-{
-  return interp_frame[i].s;
-}
-
-uint8_t Led::getInterpFrameVal(uint8_t i)
-{
-  return interp_frame[i].v;
-}
-
-void Led::setInterpFrame(uint8_t i, CHSV color)
-{
-  interp_frame[i] = color;
-}
-
-void Led::setInterpFrameHue(uint8_t i, uint8_t hue)
-{
-  interp_frame[i].h = hue;
-}
-
-void Led::setInterpFrameSat(uint8_t i, uint8_t sat)
-{
-  interp_frame[i].s = sat;
-}
-
-void Led::setInterpFrameVal(uint8_t i, uint8_t val)
-{
-  interp_frame[i].v = val;
-}
-
 bool Led::is_black(CHSV color)
 {
   return color.v == 0;
-//  return color == BLACK;
 }
 
 CHSV Led::wheel(uint8_t hue)
@@ -250,7 +174,6 @@ CHSV Led::gradient_wheel(uint8_t hue, uint8_t intensity)
 {
   return CHSV(hue, 255, dim8_raw(intensity));  // middle = saturation
 }
-
 
 CHSV Led::rgb_to_hsv( CRGB rgb)
 {
@@ -288,81 +211,6 @@ CHSV Led::rgb_to_hsv( CRGB rgb)
     return hsv;
 }
 
-
-/*
-CHSV Led::rgb_to_hsv( CRGB color)
-{
-  // Can this be rewritten to avoid floats? SD 10/24/2018
-  // DEPRECATED CODE (10/16/2018) saved for archival purposes
-  float h,s,v;
-  float* p_h;
-  float* p_s;
-  float* p_v;
-  p_h = &h;
-  p_s = &s;
-  p_v = &v;
-
-  RGBtoHSV(color.r, color.g, color.b, p_h, p_s, p_v);
-
-  return CHSV(byte(h * 255 / 360), byte(s * 255), byte(v * 255));
-}
-
-
-void Led::RGBtoHSV(uint8_t red, uint8_t green, uint8_t blue, float *h, float *s, float *v )
-{
-  // Can this be rewritten to avoid floats? SD 10/24/2018
-  //
-  // r,g,b values are from 0 to 255
-  // h = [0,360], s = [0,1], v = [0,1]
-  // if s == 0, then h = -1 (undefined)
-  //
-  // code from http://www.cs.rit.edu/~ncs/color/t_convert.html
-  //
-  float r = red/float(255);
-  float g = green/float(255);
-  float b = blue/float(255);
-
-  float MIN = min(r, min(g,b));  // min(r,g,b)
-  float MAX = max(r, max(g,b));  // max(r,g,b)
-
-  *v = MAX;            // v
-
-  float delta = MAX - MIN;
-
-  if (MAX != 0 ) *s = delta / MAX;  // s
-  else { // r = g = b = 0   // s = 0, v is undefined
-    *s = 0;
-    *h = -1;
-    return;
-  }
-  if( r == MAX ) *h = 60.0 * ( g - b ) / delta; // between yellow & magenta
-  else {
-    if( g == MAX ) {
-      *h = 120.0 + 60.0 * ( b - r ) / delta; // between cyan & yellow
-    } else {
-      *h = 240.0 + 60.0 * ( r - g ) / delta;  // between magenta & cyan
-    }
-  }
-  if( *h < 0 ) *h += 360;
-}
-*/
-
-
-void Led::setAsSquare(void)
-{
-  num_neighbors = 4;
-}
-
-void Led::setAsPentagon(void)
-{
-  num_neighbors = 5;
-}
-
-void Led::setOnlyRed(void)
-{
-  is_only_red = true;
-}
-
 CHSV Led::getInterpHSV(CHSV c1, CHSV c2, uint8_t fract)
 {
   if (c1 == c2) {
@@ -383,21 +231,15 @@ CHSV Led::getInterpHSV(CHSV c1, CHSV c2, uint8_t fract)
   }
 }
 
-CHSV Led::getInterpHSV(CHSV c1, CHSV c2, CHSV old_color, uint8_t fract)
+CHSV Led::narrow_palette(CHSV color, uint8_t hue_center, uint8_t hue_width, uint8_t saturation)
 {
-  if (c1 == c2) {
-    return c1;
-  } else if (fract == 0) {
-    return c1;
-  } else if (fract == 255) {
-    return c2;
-  } else {
-
-    return CHSV(interpolate_wrap(c1.h, c2.h, old_color.h, fract),
-                255, // Always saturated
-                interpolate(c1.v, c2.v, fract)
-               );
+  uint8_t h1 = (hue_center - (hue_width / 2)) % 255;
+  uint8_t h2 = (hue_center + (hue_width / 2)) % 255;
+  color.h = map8(color.h, h1, h2 );
+  if (color.s != 0) {
+    color.s = saturation;  // Reset saturation
   }
+  return color;
 }
 
 CRGB Led::getInterpRGB(CRGB c1, CRGB c2, uint8_t fract)
@@ -409,6 +251,8 @@ CRGB Led::getInterpRGB(CRGB c1, CRGB c2, uint8_t fract)
              );
 }
 
+// Deprecated? May 2023
+/*
 CHSV Led::getInterpRGBthruHSV(CRGB c1, CRGB c2, uint8_t fract)
 {
   // 1. Convert RGB colors to HSV
@@ -428,6 +272,7 @@ CHSV Led::getInterpHSVthruRGB(CHSV c1, CHSV c2, uint8_t fract)
   CHSV new_color = rgb_to_hsv(color);
   return CHSV(new_color.h, 255, new_color.s);  // Force always to saturate
 }
+*/
 
 uint8_t Led::interpolate(uint8_t a, uint8_t b, uint8_t fract)
 {
@@ -452,7 +297,6 @@ uint8_t Led::interpolate_wrap(uint8_t a, uint8_t b, uint8_t old, uint8_t fract)
   } else {
     return answer2;
   }
-//  return answer % 256;
 }
 
 uint8_t Led::interpolate_wrap(uint8_t a, uint8_t b, uint8_t fract)
@@ -480,9 +324,9 @@ uint8_t Led::smooth(uint8_t old_value, uint8_t new_value, uint8_t max_change)
     return new_value;
   }
   if (new_value > old_value) {
-    return old_value + min(int(max_change), int(new_value - old_value));
+    return old_value + min(uint8_t(max_change), uint8_t(new_value - old_value));
   } else {
-    return old_value - min(int(max_change), int(old_value - new_value));
+    return old_value - min(uint8_t(max_change), uint8_t(old_value - new_value));
   }
 }
 
@@ -505,12 +349,11 @@ uint8_t Led::smooth_wrap(uint8_t old_value, uint8_t new_value, uint8_t max_chang
   return answer % 256;
 }
 
-CHSV Led::smooth_color(CHSV old_color, CHSV new_color, uint8_t max_change)
+CHSV Led::smooth_color(CHSV old_color, CHSV new_color, uint8_t max_hue_change, uint8_t max_value_change)
 {
-  // Should I worry about saturation and value?
-  return CHSV(smooth_wrap(old_color.h, new_color.h, max_change),
-              new_color.s,
-              smooth(old_color.v, new_color.v, 20));
+  return CHSV(smooth_wrap(old_color.h, new_color.h, max_hue_change),
+              255,  // try always saturated
+              smooth(old_color.v, new_color.v, max_value_change));
 }
 
 CRGB Led::smooth_rgb_color(CRGB old_color, CRGB new_color, uint8_t max_change)
@@ -518,6 +361,26 @@ CRGB Led::smooth_rgb_color(CRGB old_color, CRGB new_color, uint8_t max_change)
   return CRGB(smooth(old_color.r, new_color.r, max_change),
               smooth(old_color.g, new_color.g, max_change),
               smooth(old_color.b, new_color.b, max_change));
+}
+
+void Led::setAsSquare(void)
+{
+  num_neighbors = 4;
+}
+
+void Led::setAsPentagon(void)
+{
+  num_neighbors = 5;
+}
+
+void Led::setAsHexagon(void)
+{
+  num_neighbors = 6;
+}
+
+void Led::setOnlyRed(void)
+{
+  is_only_red = true;
 }
 
 void Led::setLedMap(uint8_t *led_map_pointer)

@@ -5,15 +5,16 @@
 //
 #include <FastLED.h>
 
-#include "Led.h"  // include this library's description file
+#include "Led_Dragon.h"  // include this library's description file
 
 #define BLACK  CHSV(0, 0, 0)
-#define XX  255
+#define OFF  255
+#define XX   9999  // Out of bounds
 
 //
 // Constructor
 //
-Led::Led(uint8_t i)
+Led::Led(uint16_t i)
 {
   numLeds = i;
 
@@ -21,157 +22,101 @@ Led::Led(uint8_t i)
   next_frame = (CHSV *)calloc(numLeds, sizeof(CHSV));
   interp_frame = (CHSV *)calloc(numLeds, sizeof(CHSV));
 
-  is_only_red = false;
-
-  is_mapped = false;
-  is_2d_mapped = false;
-  is_neighbor_mapped = false;
-
-  num_neighbors = 6;  // Default to hexagonal
 }
 
 //
 // Public Methods //////////////////////////////////////////////////////////////
 //
-uint8_t Led::getNumLeds(void)
+uint16_t Led::getNumLeds(void)
 {
   return numLeds;
 }
 
 void Led::fill(CHSV color)
 {
-  for (uint8_t i = 0; i < numLeds; i++) {
+  for (uint16_t i = 0; i < numLeds; i++) {
     setPixelColor(i, color);
   }
 }
 
 void Led::fillHue(uint8_t hue)
 {
-  for (uint8_t i = 0; i < numLeds; i++) {
+  for (uint16_t i = 0; i < numLeds; i++) {
     setPixelHue(i, hue);
   }
 }
 
 void Led::fillBlack(void)
 {
-  for (uint8_t i = 0; i < numLeds; i++) {
+  for (uint16_t i = 0; i < numLeds; i++) {
     setPixelColor(i, BLACK);
   }
 }
 
-void Led::setPixelColor(uint8_t i, CHSV color)
+void Led::setPixelColor(uint16_t i, CHSV color)
 {
   if (i != XX) {
-    if (is_only_red) {
-      color.h = map8(color.h, 224, 32);
-    }
-    if (hasBlur()) {
-      if (is_black(color)) return;
-      color.v = scale8(color.v, 255 - blur_amount);
-      addPixelColor(i, color);
-    } else {
-      next_frame[lookupLed(i)] = color;
-    }
+    next_frame[i] = color;
   }
 }
 
-void Led::setPixelHue(uint8_t i, uint8_t hue)
+void Led::setPixelHue(uint16_t i, uint8_t hue)
 {
   setPixelColor(i, wheel(hue));
 }
 
-void Led::setPixelBlack(uint8_t i)
+void Led::setPixelBlack(uint16_t i)
 {
   setPixelColor(i, BLACK);
 }
 
-void Led::setPixelColorNoMap(uint8_t i, CHSV color)
+void Led::increasePixelHue(uint16_t i, uint8_t increase)
 {
   if (i != XX) {
-    if (is_only_red) {
-      color.h = map8(color.h, 224, 32);
-    }
-    if (hasBlur()) {
-      if (is_black(color)) return;
-      color.v = scale8(color.v, 255 - blur_amount);
-      addPixelColorNoMap(i, color);
-    } else {
-      next_frame[i] = color;
-    }
+    next_frame[i].h += increase;
   }
 }
 
-void Led::setPixelHueNoMap(uint8_t i, uint8_t hue)
-{
-  setPixelColorNoMap(i, wheel(hue));
-}
-
-void Led::setPixelBlackNoMap(uint8_t i)
-{
-  setPixelColorNoMap(i, BLACK);
-}
-
-void Led::dimPixel(uint8_t i, uint8_t amount)
+void Led::dimPixel(uint16_t i, uint8_t amount)
 {
   if (i != XX) {
-    next_frame[lookupLed(i)].v = scale8(next_frame[lookupLed(i)].v, 255 - amount);
+    next_frame[i].v = scale8(next_frame[i].v, 255 - amount);
   }
 }
 
 void Led::dimAllPixels(uint8_t amount)
 {
-  for (uint8_t i = 0; i < numLeds; i++) {
+  for (uint16_t i = 0; i < numLeds; i++) {
     dimPixel(i, amount);
   }
 }
 
 // This calculates the interpolated frame, but does not update the leds
+void Led::morph_frame(uint8_t fract)
+{
+  for (uint16_t i = 0; i < numLeds; i++) {
+    interp_frame[i] = getInterpHSV(current_frame[i], next_frame[i], fract);
+  }
+}
+/*
 void Led::morph_frame(uint8_t morph, uint8_t total_frames)
 {
   uint8_t fract = map(morph, 0, total_frames, 0, 255);  // 0 - 255
 
-  for (uint8_t i = 0; i < numLeds; i++) {
+  for (uint16_t i = 0; i < numLeds; i++) {
     interp_frame[i] = getInterpHSV(current_frame[i], next_frame[i], fract);
   }
 }
+*/
 
 void Led::push_frame(void)
 {
-  for (uint8_t i = 0; i < numLeds; i++) {
+  for (uint16_t i = 0; i < numLeds; i++) {
     current_frame[i] = next_frame[i];
   }
 }
 
-void Led::turnOffBlur(void)
-{
-  blur_amount = 0;
-}
-
-void Led::setBlur(uint8_t b)
-{
-  blur_amount = b;
-}
-
-bool Led::hasBlur(void)
-{
-  return (blur_amount != 0);
-}
-
-void Led::addPixelColor(uint8_t i, CHSV c2)
-{
-  // Pick the dominant color (c1 vs. c2) by value, instead of morphing them
-  if (i != XX) {
-    CHSV c1 = next_frame[lookupLed(i)];
-
-    if (c1.v > c2.v) {
-      next_frame[lookupLed(i)] = c1;
-    } else {
-      next_frame[lookupLed(i)] = c2;
-    }
-  }
-}
-
-void Led::addPixelColorNoMap(uint8_t i, CHSV c2)
+void Led::addPixelColor(uint16_t i, CHSV c2)
 {
   // Pick the dominant color (c1 vs. c2) by value, instead of morphing them
   if (i != XX) {
@@ -185,52 +130,52 @@ void Led::addPixelColorNoMap(uint8_t i, CHSV c2)
   }
 }
 
-CHSV Led::getCurrFrameColor(uint8_t i)
+CHSV Led::getCurrFrameColor(uint16_t i)
 {
   return current_frame[i];
 }
 
-CHSV Led::getNextFrameColor(uint8_t i)
+CHSV Led::getNextFrameColor(uint16_t i)
 {
   return next_frame[i];
 }
 
-CHSV Led::getInterpFrameColor(uint8_t i)
+CHSV Led::getInterpFrameColor(uint16_t i)
 {
   return interp_frame[i];
 }
 
-uint8_t Led::getInterpFrameHue(uint8_t i)
+uint8_t Led::getInterpFrameHue(uint16_t i)
 {
   return interp_frame[i].h;
 }
 
-uint8_t Led::getInterpFrameSat(uint8_t i)
+uint8_t Led::getInterpFrameSat(uint16_t i)
 {
   return interp_frame[i].s;
 }
 
-uint8_t Led::getInterpFrameVal(uint8_t i)
+uint8_t Led::getInterpFrameVal(uint16_t i)
 {
   return interp_frame[i].v;
 }
 
-void Led::setInterpFrame(uint8_t i, CHSV color)
+void Led::setInterpFrame(uint16_t i, CHSV color)
 {
   interp_frame[i] = color;
 }
 
-void Led::setInterpFrameHue(uint8_t i, uint8_t hue)
+void Led::setInterpFrameHue(uint16_t i, uint8_t hue)
 {
   interp_frame[i].h = hue;
 }
 
-void Led::setInterpFrameSat(uint8_t i, uint8_t sat)
+void Led::setInterpFrameSat(uint16_t i, uint8_t sat)
 {
   interp_frame[i].s = sat;
 }
 
-void Led::setInterpFrameVal(uint8_t i, uint8_t val)
+void Led::setInterpFrameVal(uint16_t i, uint8_t val)
 {
   interp_frame[i].v = val;
 }
@@ -286,81 +231,6 @@ CHSV Led::rgb_to_hsv( CRGB rgb)
         hsv.h = 171 + 43 * (rgb.r - rgb.g) / (rgbMax - rgbMin);
 
     return hsv;
-}
-
-
-/*
-CHSV Led::rgb_to_hsv( CRGB color)
-{
-  // Can this be rewritten to avoid floats? SD 10/24/2018
-  // DEPRECATED CODE (10/16/2018) saved for archival purposes
-  float h,s,v;
-  float* p_h;
-  float* p_s;
-  float* p_v;
-  p_h = &h;
-  p_s = &s;
-  p_v = &v;
-
-  RGBtoHSV(color.r, color.g, color.b, p_h, p_s, p_v);
-
-  return CHSV(byte(h * 255 / 360), byte(s * 255), byte(v * 255));
-}
-
-
-void Led::RGBtoHSV(uint8_t red, uint8_t green, uint8_t blue, float *h, float *s, float *v )
-{
-  // Can this be rewritten to avoid floats? SD 10/24/2018
-  //
-  // r,g,b values are from 0 to 255
-  // h = [0,360], s = [0,1], v = [0,1]
-  // if s == 0, then h = -1 (undefined)
-  //
-  // code from http://www.cs.rit.edu/~ncs/color/t_convert.html
-  //
-  float r = red/float(255);
-  float g = green/float(255);
-  float b = blue/float(255);
-
-  float MIN = min(r, min(g,b));  // min(r,g,b)
-  float MAX = max(r, max(g,b));  // max(r,g,b)
-
-  *v = MAX;            // v
-
-  float delta = MAX - MIN;
-
-  if (MAX != 0 ) *s = delta / MAX;  // s
-  else { // r = g = b = 0   // s = 0, v is undefined
-    *s = 0;
-    *h = -1;
-    return;
-  }
-  if( r == MAX ) *h = 60.0 * ( g - b ) / delta; // between yellow & magenta
-  else {
-    if( g == MAX ) {
-      *h = 120.0 + 60.0 * ( b - r ) / delta; // between cyan & yellow
-    } else {
-      *h = 240.0 + 60.0 * ( r - g ) / delta;  // between magenta & cyan
-    }
-  }
-  if( *h < 0 ) *h += 360;
-}
-*/
-
-
-void Led::setAsSquare(void)
-{
-  num_neighbors = 4;
-}
-
-void Led::setAsPentagon(void)
-{
-  num_neighbors = 5;
-}
-
-void Led::setOnlyRed(void)
-{
-  is_only_red = true;
 }
 
 CHSV Led::getInterpHSV(CHSV c1, CHSV c2, uint8_t fract)
@@ -509,7 +379,7 @@ CHSV Led::smooth_color(CHSV old_color, CHSV new_color, uint8_t max_change)
 {
   // Should I worry about saturation and value?
   return CHSV(smooth_wrap(old_color.h, new_color.h, max_change),
-              new_color.s,
+              255, // new_color.s,  // try always saturated
               smooth(old_color.v, new_color.v, 20));
 }
 
@@ -518,79 +388,4 @@ CRGB Led::smooth_rgb_color(CRGB old_color, CRGB new_color, uint8_t max_change)
   return CRGB(smooth(old_color.r, new_color.r, max_change),
               smooth(old_color.g, new_color.g, max_change),
               smooth(old_color.b, new_color.b, max_change));
-}
-
-void Led::setLedMap(uint8_t *led_map_pointer)
-{
-  // led_map should be stored on the client as:
-  //   const uint8_t LedMap[] PROGMEM = {
-  //
-  led_map = led_map_pointer;
-  is_mapped = true;
-}
-
-void Led::setCoordMap(uint8_t width, const uint8_t *coord_pointer)
-{
-  // coord_map should be stored on the client as:
-  //   const uint8_t coords[] PROGMEM = {
-  //     XX,XX, 1, 0,XX,XX,XX,  // etc.
-  // 1D array of 2D data. -1 = no LED
-  coords = coord_pointer;
-  width_2d = width;
-  is_2d_mapped = true;
-}
-
-void Led::setNeighborMap(const uint8_t *neighbor_map)
-{
-  // neighbor_map should be stored on the client as:
-  //   const uint8_t neighbors[] PROGMEM = {
-  //      XX,6,7,XX,XX,XX, // 0
-  //      XX,6,7,XX,XX,XX, // 1  etc.
-  // one row of 6 values per hexagonal pixel:
-  //      ul, ur, r, lr, ll, l (u = upper, l = lower, r = right, l = left)
-  //      XX = no neighbor
-  neighbors = neighbor_map;
-  is_neighbor_mapped = true;
-}
-
-uint8_t Led::lookupLed(uint8_t i)
-{
-  if (is_mapped) {
-    return pgm_read_byte_near(led_map + i);
-  } else {
-    return i;  // Otherwise default to just i
-  }
-}
-
-void Led::turnOffLedMap()
-{
-  is_mapped = false;
-}
-
-void Led::turnOnLedMap()
-{
-  is_mapped = true;
-}
-
-uint8_t Led::getNeighbor(uint8_t pos, uint8_t dir)
-{
-  if (is_neighbor_mapped && pos != XX) {
-    return pgm_read_byte_near(neighbors + (pos * num_neighbors) + (dir % num_neighbors));
-  } else {
-    return pos;  // Dummy default will show strange behaviour
-  }
-}
-
-uint8_t Led::getSymmetry()
-{
-   return num_neighbors;
-}
-
-uint8_t Led::getLedFromCoord(uint8_t x, uint8_t y)
-{
-  if (is_2d_mapped) {
-    return pgm_read_byte_near(coords + (x * width_2d) + (y % width_2d));
-  } else {
-    return x;  // Dummy default will show strange behaviour
-  }
 }

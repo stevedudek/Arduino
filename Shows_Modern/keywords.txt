@@ -1,0 +1,39 @@
+#######################################
+# Syntax Coloring Map For Noise
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+Shows	KEYWORD1
+Shows_Dragon	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+allOn    KEYWORD2
+randomFill    KEYWORD2
+randomColors    KEYWORD2
+twoColor    KEYWORD2
+morphChain    KEYWORD2
+sawTooth    KEYWORD2
+bands    KEYWORD2
+lightWave    KEYWORD2
+lightRunUp    KEYWORD2
+shuffleLeds    KEYWORD2
+setForeColor    KEYWORD2
+setBackColor    KEYWORD2
+setMorph    KEYWORD2
+setCycle    KEYWORD2
+IncColor    KEYWORD2
+
+#######################################
+# Instances (KEYWORD2)
+#######################################
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+

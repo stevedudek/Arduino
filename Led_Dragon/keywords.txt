@@ -1,0 +1,44 @@
+#######################################
+# Syntax Coloring Map For Noise
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+Led	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+fill    KEYWORD2
+fillHue    KEYWORD2
+fillBlack    KEYWORD2
+setPixelColor    KEYWORD2
+setPixelHue    KEYWORD2
+morph_frame    KEYWORD2
+push_frame    KEYWORD2
+addPixelColor    KEYWORD2
+getCurrFrameColor    KEYWORD2
+getNextFrameColor    KEYWORD2
+getInterpFrameColor    KEYWORD2
+Wheel    KEYWORD2
+Gradient_Wheel    KEYWORD2
+rgb_to_hsv    KEYWORD2
+RGBtoHSV    KEYWORD2
+is_black    KEYWORD2
+setPalette    KEYWORD2
+turnPalettesOn    KEYWORD2
+turnPalettesOff    KEYWORD2
+randomizePalette    KEYWORD2
+constrain_palette    KEYWORD2
+
+#######################################
+# Instances (KEYWORD2)
+#######################################
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+

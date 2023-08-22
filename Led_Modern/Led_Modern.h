@@ -1,8 +1,8 @@
 //
-//  Led.h
+//  Led_Modern.h - handles new clock cycling, 16-bit LED number
 //
-#ifndef Led_h
-#define Led_h
+#ifndef Led_Modern_h
+#define Led_Modern_h
 
 class Led
 {
@@ -19,6 +19,7 @@ class Led
     void
       setPixelColor(uint8_t i, CHSV color), setPixelColorNoMap(uint8_t i, CHSV color),
       setPixelHue(uint8_t i, uint8_t hue), setPixelHueNoMap(uint8_t i, uint8_t hue),
+      increasePixelHue(uint8_t i, uint8_t increase),
       setPixelBlack(uint8_t i), setPixelBlackNoMap(uint8_t i);
     void
       dimPixel(uint8_t i, uint8_t amount),
@@ -30,42 +31,28 @@ class Led
     uint8_t
       lookupLed(uint8_t i),
       getLedFromCoord(uint8_t x, uint8_t y),
-      getNeighbor(uint8_t pos, uint8_t dir),
+      getNeighbor(uint8_t pos, uint8_t dir);
+    uint8_t
       getSymmetry(void);
-    void morph_frame(uint8_t morph, uint8_t total_frames);
-    void push_frame(void);
     void
-      setBlur(uint8_t b), turnOffBlur(void);
-    bool
-      hasBlur(void);
+      setAsSquare(void), setAsPentagon(void), setAsHexagon(void), setOnlyRed(void);
+    void
+      smooth_frame(uint8_t max_change), push_frame(void);
     void
       addPixelColor(uint8_t i, CHSV c2), addPixelColorNoMap(uint8_t i, CHSV c2);
     CHSV
-      getCurrFrameColor(uint8_t i),
-      getNextFrameColor(uint8_t i),
-      getInterpFrameColor(uint8_t i);
-    uint8_t
-      getInterpFrameHue(uint8_t i),
-      getInterpFrameSat(uint8_t i),
-      getInterpFrameVal(uint8_t i);
-    void
-      setInterpFrame(uint8_t i, CHSV color),
-      setInterpFrameHue(uint8_t i, uint8_t hue),
-      setInterpFrameSat(uint8_t i, uint8_t sat),
-      setInterpFrameVal(uint8_t i, uint8_t val);
+      getCurrFrameColor(uint8_t i), getNextFrameColor(uint8_t i);
     CHSV
       wheel(uint8_t hue),
       gradient_wheel(uint8_t hue, uint8_t intensity);
-    CHSV rgb_to_hsv( CRGB color);
     CHSV
+      rgb_to_hsv( CRGB color),
       getInterpHSV(CHSV c1, CHSV c2, uint8_t fract),
-      getInterpHSV(CHSV c1, CHSV c2, CHSV old_color, uint8_t fract),
-      getInterpHSVthruRGB(CHSV c1, CHSV c2, uint8_t fract),
-      smooth_color(CHSV old_color, CHSV new_color, uint8_t max_change);
+      smooth_color(CHSV old_color, CHSV new_color, uint8_t max_hue_change, uint8_t max_value_change),
+      narrow_palette(CHSV color, uint8_t hue_center, uint8_t hue_width, uint8_t saturation);
     CRGB
         getInterpRGB(CRGB c1, CRGB c2, uint8_t fract),
         smooth_rgb_color(CRGB old_color, CRGB new_color, uint8_t max_change);
-    CHSV getInterpRGBthruHSV(CRGB c1, CRGB c2, uint8_t fract);
     void RGBtoHSV(uint8_t red, uint8_t green, uint8_t blue, float *h, float *s, float *v );
     void rgb2hsv_new(uint8_t src_r, uint8_t src_g, uint8_t src_b, uint8_t *dst_h, uint8_t *dst_s, uint8_t *dst_v);
     bool
@@ -76,21 +63,15 @@ class Led
       interpolate_wrap(uint8_t a, uint8_t b, uint8_t old_value, uint8_t fract),
       smooth(uint8_t old_value, uint8_t new_value, uint8_t max_change),
       smooth_wrap(uint8_t old_value, uint8_t new_value, uint8_t max_change);
-    void
-      setOnlyRed(void);  // Use only purple-red-yellow colors
-    void
-      setAsSquare(void), setAsPentagon(void);
-
 
   private:
 
     // variables
-    uint16_t numLeds;
+    uint8_t numLeds;
     uint8_t width_2d;
 
     CHSV *current_frame;
     CHSV *next_frame;
-    CHSV *interp_frame;
 
     bool
       is_only_red;
@@ -98,13 +79,12 @@ class Led
     const uint8_t
       *led_map, *coords, *neighbors;
 
-    uint8_t blur_amount;
-
     bool
-      is_mapped, is_2d_mapped, is_neighbor_mapped;  // Are the LEDs explicitly mapped?
+      is_mapped = false,
+      is_2d_mapped = false,
+      is_neighbor_mapped = false;  // Are the LEDs explicitly mapped?
 
-    uint8_t num_neighbors;
-    // private functions
+    uint8_t num_neighbors = 6;
 
 };
 

@@ -8,51 +8,43 @@ class Led
 {
   public:
 
-    Led(uint8_t i);
+    Led(uint16_t i);
 
-    uint8_t
+    uint16_t
       getNumLeds(void);
     void
       fill(CHSV color),
       fillHue(uint8_t hue),
       fillBlack(void);
     void
-      setPixelColor(uint8_t i, CHSV color), setPixelColorNoMap(uint8_t i, CHSV color),
-      setPixelHue(uint8_t i, uint8_t hue), setPixelHueNoMap(uint8_t i, uint8_t hue),
-      setPixelBlack(uint8_t i), setPixelBlackNoMap(uint8_t i);
+      setPixelColor(uint16_t i, CHSV color), setPixelHue(uint16_t i, uint8_t hue),
+      increasePixelHue(uint16_t i, uint8_t increase), flipPixel(uint16_t i),
+      setPixelBlack(uint16_t i);
     void
-      dimPixel(uint8_t i, uint8_t amount),
+      dimPixel(uint16_t i, uint8_t amount),
       dimAllPixels(uint8_t amount);
-    void
-      setLedMap(uint8_t *led_map_pointer), turnOnLedMap(), turnOffLedMap(),
-      setCoordMap(uint8_t width, const uint8_t *coord_pointer),
-      setNeighborMap(const uint8_t *neighbor_map);
-    uint8_t
-      lookupLed(uint8_t i),
-      getLedFromCoord(uint8_t x, uint8_t y),
-      getNeighbor(uint8_t pos, uint8_t dir),
-      getSymmetry(void);
-    void morph_frame(uint8_t morph, uint8_t total_frames);
+    // void morph_frame(uint8_t morph, uint8_t total_frames);
+    void morph_frame(uint8_t fract);
     void push_frame(void);
     void
       setBlur(uint8_t b), turnOffBlur(void);
     bool
       hasBlur(void);
     void
-      addPixelColor(uint8_t i, CHSV c2), addPixelColorNoMap(uint8_t i, CHSV c2);
+      addPixelColor(uint16_t i, CHSV c2), addPixelColorNoMap(uint16_t i, CHSV c2);
     CHSV
-      getCurrFrameColor(uint8_t i),
-      getNextFrameColor(uint8_t i),
-      getInterpFrameColor(uint8_t i);
+      getCurrFrameColor(uint16_t i),
+      getNextFrameColor(uint16_t i),
+      getInterpFrameColor(uint16_t i);
     uint8_t
-      getInterpFrameHue(uint8_t i),
-      getInterpFrameSat(uint8_t i),
-      getInterpFrameVal(uint8_t i);
+      getInterpFrameHue(uint16_t i),
+      getInterpFrameSat(uint16_t i),
+      getInterpFrameVal(uint16_t i);
     void
-      setInterpFrame(uint8_t i, CHSV color),
-      setInterpFrameHue(uint8_t i, uint8_t hue),
-      setInterpFrameSat(uint8_t i, uint8_t sat),
-      setInterpFrameVal(uint8_t i, uint8_t val);
+      setInterpFrame(uint16_t i, CHSV color),
+      setInterpFrameHue(uint16_t i, uint8_t hue),
+      setInterpFrameSat(uint16_t i, uint8_t sat),
+      setInterpFrameVal(uint16_t i, uint8_t val);
     CHSV
       wheel(uint8_t hue),
       gradient_wheel(uint8_t hue, uint8_t intensity);
@@ -76,34 +68,18 @@ class Led
       interpolate_wrap(uint8_t a, uint8_t b, uint8_t old_value, uint8_t fract),
       smooth(uint8_t old_value, uint8_t new_value, uint8_t max_change),
       smooth_wrap(uint8_t old_value, uint8_t new_value, uint8_t max_change);
-    void
-      setOnlyRed(void);  // Use only purple-red-yellow colors
-    void
-      setAsSquare(void), setAsPentagon(void);
-
 
   private:
 
     // variables
     uint16_t numLeds;
-    uint8_t width_2d;
 
     CHSV *current_frame;
     CHSV *next_frame;
     CHSV *interp_frame;
 
-    bool
-      is_only_red;
-
-    const uint8_t
-      *led_map, *coords, *neighbors;
-
     uint8_t blur_amount;
 
-    bool
-      is_mapped, is_2d_mapped, is_neighbor_mapped;  // Are the LEDs explicitly mapped?
-
-    uint8_t num_neighbors;
     // private functions
 
 };

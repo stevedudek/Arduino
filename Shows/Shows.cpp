@@ -18,6 +18,9 @@
 //  Shows
 //     within this library, use the led->func() notation, such as led->setPixelHue(i, foreColor)
 //
+//
+//   USE this REPO
+//
 #include <FastLED.h>
 #include <Led.h>
 #include "Shows.h"
@@ -415,14 +418,33 @@ void Shows::setColorSpeedMinMax(uint8_t speed_min, uint8_t speed_max)
   color_speed_max = speed_max;
 }
 
+void Shows::setColorSpeedMinMax(uint8_t show_speed)
+{
+  color_speed_min = map8(show_speed, 1, 10);
+  color_speed_max = map8(show_speed, 10, 100);
+}
+
 uint8_t Shows::getWait(void)
 {
   return wait;
 }
 
+void Shows::setWaitAbsolute(uint8_t w)
+{
+  wait = w;
+}
+
 void Shows::setWait(uint8_t w)
 {
   wait = max(min(w, wait_max), wait_min);
+}
+
+void Shows::setWaitRange(uint8_t show_speed)
+{
+  wait_min = map8(show_speed, 2, 40);
+  wait_max = map8(show_speed, 10, 200);
+  num_wait_values = wait_max - wait_min;
+  setWait(wait);  // make sure wait is within the new range
 }
 
 void Shows::setWaitRange(uint8_t min, uint8_t max)
@@ -569,6 +591,15 @@ void Shows::morphChain(void)
   }
 }
 
+void Shows::confetti(void)
+{
+  led->dimAllPixels(10);  // Try different amounts
+
+  if (getSmallCycle() % 5 == 0) {
+    setPixeltoForeColor(random8(numLeds - 1));
+  }
+}
+
 void Shows::sinelon_fastled(void)
 {
   // a colored dot sweeping back and forth, with fading trails
@@ -618,62 +649,22 @@ void Shows::sawTooth(void)
 
 void Shows::lightWave(void)
 {
-  lightWave(10);
-}
-
-void Shows::lightWave(uint8_t spacing)
-{
-  if (!has_blur || cycle == 0) {
-    lightWave_blur(cycle, spacing);
-  } else {
-    led->turnOffBlur();
-    lightWave_blur(cycle + 0, spacing);
-
-    led->setBlur(96);  // Blur fractional intensity (x/256)
-    lightWave_blur(cycle - 1, spacing);  // Blur step before
-    lightWave_blur(cycle + 1, spacing);  // Blur step after
-    led->turnOffBlur();
-  }
-}
-
-void Shows::lightWave_blur(uint16_t cyc, uint8_t spacing)
-{
-  for (uint8_t i = 0; i < numLeds; i++) {
-    if ((i + cyc) % spacing == 0) {
-      led->setPixelHue(i, foreColor);
-    } else {
-      led->setPixelColor(i, getForeBlack());
-    }
-  }
+  // If broken, look in the other Shows repo...
+  led->dimAllPixels(3);
+  setPixeltoForeColor(cycle % numLeds);
 }
 
 void Shows::lightRunUp(void)
 {
-   if (!has_blur || cycle == 0) {
-     lightRunUp_blur(cycle);
-   } else {
-     led->turnOffBlur();
-     lightRunUp_blur(cycle + 0);
-     led->setBlur(128);
-     lightRunUp_blur(cycle - 1);
-     lightRunUp_blur(cycle + 1);
-     led->turnOffBlur();
-   }
-}
+  led->dimAllPixels(10);
 
-void Shows::lightRunUp_blur(uint16_t cyc)
-{
-  uint8_t pos = cyc % (numLeds*2);  // Where we are in the show
+  uint8_t pos = cycle % (numLeds*2);  // Where we are in the show
   if (pos >= numLeds) {
     pos = (numLeds * 2) - pos;
   }
 
-  for (uint8_t i=0; i < numLeds; i++) {
-    if (i < pos) {
-      led->setPixelHue(i, foreColor + (i * (foreColorSpeed / 5)));  // Turning on lights one at a time
-    } else {
-      led->setPixelColor(i, getForeBlack());
-    }
+  for (uint8_t i=0; i < pos; i++) {
+    led->setPixelHue(i, foreColor + (i * (foreColorSpeed / 5)));  // Turning on lights one at a time
   }
 }
 
@@ -804,7 +795,7 @@ void Shows::plinko(uint8_t start_pos)
       plink[i] = XX;  // Move plinkos off the board
       makeWaitFaster(4);
     }
-    num_plinko = random(1, MAX_PLINKO);
+    num_plinko = random(3, MAX_PLINKO);
   }
 
   if (morph > 0) {
