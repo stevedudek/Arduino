@@ -5,12 +5,12 @@
 //  10/13/2017
 //
 
-#define NUM_LEDS 50
+#define NUM_LEDS 117
 
-#define BRIGHTNESS  255 # (0-255)
+#define BRIGHTNESS  255  // (0-255)
 
-#define DATA_PIN 9
-#define CLOCK_PIN 8
+#define DATA_PIN 13
+#define CLOCK_PIN 14
 
 CRGB leds[NUM_LEDS];
 
@@ -27,7 +27,7 @@ byte backColor = 99;   // Starting background color
 #define MAX_COLOR 255   // Colors are 0-255 (hue)
 
 // Shows
-int light_show = 4;       // Starting show
+int light_show = 0;       // Starting show
 #define MAX_SHOW 8  // Total number of shows
 
 int morph = 0;      // Keeps track of morphing steps (morph clock - minute hand)
@@ -36,7 +36,7 @@ boolean update = true; // flag that tells whether lights need to be recalculated
 int wait = 6;
 #define MAX_WAIT 12 // Number of stored delay times 
 #define DELAY_TIME 20   // delay (in ms) between morphs
-#define SHOW_DELAY 1000 // delay (in ms) between shows
+#define SHOW_DELAY 100000 // delay (in ms) between shows
 
 //
 // Setup

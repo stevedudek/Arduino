@@ -17,11 +17,11 @@
 #define NUM_LEDS 16
 #define TOTAL_LEDS 16
 
-#define BRIGHTNESS  64 // (0-255)
+#define BRIGHTNESS  255 // (0-255)
 
 #define DELAY_TIME 40  // in milliseconds. FastLED demo has 8.3 ms delay!
 
-#define DATA_PIN 9
+#define DATA_PIN 7
 #define CLOCK_PIN 8
 
 #define CHANNEL_A  0  // Don't change these
@@ -64,10 +64,10 @@ void setup() {
   FastLED.setBrightness( BRIGHTNESS );
   
   // Set up the various mappings here (1D lists in PROGMEM)
-  //  for (uint8_t i = 0; i < DUAL; i++) {
-  //    led[i].setLedMap(ConeLookUp);  // mapping of pixels to actual leds
-  //    shows[i] = Shows(&led[i]);  // Show library - reinitialized for led mappings
-  //  }
+    for (uint8_t i = 0; i < DUAL; i++) {
+//      led[i].setLedMap(ConeLookUp);  // mapping of pixels to actual leds
+      shows[i] = Shows(&led[i]);  // Show library - reinitialized for led mappings
+    }
 
   shows[CHANNEL_B].setSmallCycle(MAX_SMALL_CYCLE / 2);  // Start Channel B offset at halfway through show
   
@@ -188,8 +188,8 @@ CHSV setOnlyRed(CHSV color) {
 void morph_channels(uint8_t fract) {
   for (int i = 0; i < NUM_LEDS; i++) {
     leds[PetalLookUp[i]] = led[CHANNEL_A].getInterpHSV(leds_buffer[CHANNEL_B][i], 
-                                          leds_buffer[CHANNEL_A][i], 
-                                          fract);  // interpolate a + b channels
+                                                       leds_buffer[CHANNEL_A][i], 
+                                                       fract);  // interpolate a + b channels
   }
 }
 
@@ -210,5 +210,5 @@ uint8_t get_intensity(uint8_t i) {
   } else {
     intensity = 0;
   }
-  return intensity;
+  return ease8InOutQuad(intensity);
 }

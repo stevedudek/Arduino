@@ -24,8 +24,8 @@ uint8_t DELAY_TIME = 30;  // in milliseconds (ArduinoBlue)
 long last_time;
 #define SMOOTHING 1   // 0 = no smooth, lower the number = more smoothing
 
-#define DATA_PIN 8
-#define CLOCK_PIN 7
+#define DATA_PIN 0  // 8
+#define CLOCK_PIN 2  // 7
 
 #define NUM_LEDS 36
 #define HALF_LEDS (NUM_LEDS / 2)  // Half that number
@@ -162,9 +162,9 @@ void setup() {
 
   randomSeed(analogRead(0));
   
-  Serial.begin(9600);
+  Serial.begin(115200);
   Serial.println("Start");
-  Serial2.begin(9600);  // Serial2: Bluetooth serial (ArduinoBlue)
+//  Serial2.begin(9600);  // Serial2: Bluetooth serial (ArduinoBlue)
 
   FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);
   FastLED.setBrightness( BRIGHTNESS );

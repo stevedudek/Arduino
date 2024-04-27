@@ -17,9 +17,9 @@
 #define NUM_LEDS 52
 #define ACTUAL_LEDS 66
 
-#define BRIGHTNESS  255 // (0-255)
+#define BRIGHTNESS  128 // (0-255)
 
-uint8_t show_speed = 128;  // (0-255)
+uint8_t show_speed = 196;  // (0-255)
 
 #define DELAY_TIME 30  // in milliseconds. FastLED demo has 8.3 ms delay!
 
@@ -49,11 +49,11 @@ uint8_t current_show[] = { START_SHOW_CHANNEL_A, START_SHOW_CHANNEL_B };
 #define NUM_SHOWS 11
 
 // Clocks and time
-uint8_t show_duration = 40;  // Typically 30 seconds. Size problems at 1800+ seconds.
+uint8_t show_duration = 60;  // Typically 30 seconds. Size problems at 1800+ seconds.
 uint8_t fade_amount = 255;  // 0 = no fading, to 255 = always be fading
 uint32_t max_small_cycle = (show_duration * 2 * (1000 / DELAY_TIME));  // *2! 50% = all on, 50% = all off, and rise + decay on edges
 
-boolean simplespikes[] = { false, false };
+uint8_t simplespikes[] = { 0, 0 };
 
 #define XX 99
 

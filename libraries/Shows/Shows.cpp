@@ -18,6 +18,9 @@
 //  Shows
 //     within this library, use the led->func() notation, such as led->setPixelHue(i, foreColor)
 //
+//
+//   USE this REPO
+//
 #include <FastLED.h>
 #include <Led.h>
 #include "Shows.h"
@@ -29,7 +32,7 @@
 
 #define MAX_PLINKO  15
 #define MAX_BALLS    4
-#define MAX_PACKETS  2
+#define MAX_PACKETS  3
 #define TRAIL_SIZE   5  // Do not make bigger than 5
 
 #define XX 255  // Out of bounds (-1)
@@ -415,14 +418,33 @@ void Shows::setColorSpeedMinMax(uint8_t speed_min, uint8_t speed_max)
   color_speed_max = speed_max;
 }
 
+void Shows::setColorSpeedMinMax(uint8_t show_speed)
+{
+  color_speed_min = map8(show_speed, 1, 10);
+  color_speed_max = map8(show_speed, 10, 100);
+}
+
 uint8_t Shows::getWait(void)
 {
   return wait;
 }
 
+void Shows::setWaitAbsolute(uint8_t w)
+{
+  wait = w;
+}
+
 void Shows::setWait(uint8_t w)
 {
   wait = max(min(w, wait_max), wait_min);
+}
+
+void Shows::setWaitRange(uint8_t show_speed)
+{
+  wait_min = map8(show_speed, 2, 40);
+  wait_max = map8(show_speed, 10, 200);
+  num_wait_values = wait_max - wait_min;
+  setWait(wait);  // make sure wait is within the new range
 }
 
 void Shows::setWaitRange(uint8_t min, uint8_t max)
@@ -569,11 +591,20 @@ void Shows::morphChain(void)
   }
 }
 
+void Shows::confetti(void)
+{
+  led->dimAllPixels(10);  // Try different amounts
+
+  if (getSmallCycle() % 5 == 0) {
+    setPixeltoForeColor(random8(numLeds - 1));
+  }
+}
+
 void Shows::sinelon_fastled(void)
 {
   // a colored dot sweeping back and forth, with fading trails
   led->dimAllPixels(20);  // replaces: fadeToBlackBy( leds, NUM_LEDS, 20);
-  uint8_t i = beatsin16(10, 0, numLeds);  // lower first number = slower
+  uint8_t i = beatsin16(8, 0, numLeds);  // lower first number = slower
   led->setPixelColor(i, CHSV(foreColor, 255, 192));  // 192 = suggested v
 }
 
@@ -618,62 +649,22 @@ void Shows::sawTooth(void)
 
 void Shows::lightWave(void)
 {
-  lightWave(10);
-}
-
-void Shows::lightWave(uint8_t spacing)
-{
-  if (!has_blur || cycle == 0) {
-    lightWave_blur(cycle, spacing);
-  } else {
-    led->turnOffBlur();
-    lightWave_blur(cycle + 0, spacing);
-
-    led->setBlur(96);  // Blur fractional intensity (x/256)
-    lightWave_blur(cycle - 1, spacing);  // Blur step before
-    lightWave_blur(cycle + 1, spacing);  // Blur step after
-    led->turnOffBlur();
-  }
-}
-
-void Shows::lightWave_blur(uint16_t cyc, uint8_t spacing)
-{
-  for (uint8_t i = 0; i < numLeds; i++) {
-    if ((i + cyc) % spacing == 0) {
-      led->setPixelHue(i, foreColor);
-    } else {
-      led->setPixelColor(i, getForeBlack());
-    }
-  }
+  // If broken, look in the other Shows repo...
+  led->dimAllPixels(3);
+  setPixeltoForeColor(cycle % numLeds);
 }
 
 void Shows::lightRunUp(void)
 {
-   if (!has_blur || cycle == 0) {
-     lightRunUp_blur(cycle);
-   } else {
-     led->turnOffBlur();
-     lightRunUp_blur(cycle + 0);
-     led->setBlur(128);
-     lightRunUp_blur(cycle - 1);
-     lightRunUp_blur(cycle + 1);
-     led->turnOffBlur();
-   }
-}
+  led->dimAllPixels(10);
 
-void Shows::lightRunUp_blur(uint16_t cyc)
-{
-  uint8_t pos = cyc % (numLeds*2);  // Where we are in the show
+  uint8_t pos = cycle % (numLeds*2);  // Where we are in the show
   if (pos >= numLeds) {
     pos = (numLeds * 2) - pos;
   }
 
-  for (uint8_t i=0; i < numLeds; i++) {
-    if (i < pos) {
-      led->setPixelHue(i, foreColor + (i * (foreColorSpeed / 5)));  // Turning on lights one at a time
-    } else {
-      led->setPixelColor(i, getForeBlack());
-    }
+  for (uint8_t i=0; i < pos; i++) {
+    led->setPixelHue(i, foreColor + (i * (foreColorSpeed / 5)));  // Turning on lights one at a time
   }
 }
 
@@ -717,7 +708,7 @@ void Shows::packets(void)
   if (isShowStart()) {
     for (uint8_t i=0; i < MAX_PACKETS; i++) {
       packet_intense[i] = 0;  // Reset all packets
-      packet_freq[i] = random(1,4);
+      packet_freq[i] = random(1,2);
     }
   }
   turnOffMorphing();
@@ -753,7 +744,7 @@ void Shows::packets(void)
 
     // Apply each packet to the lights
     for (uint8_t j=0; j < numLeds; j++) {
-      wave = beatsin8(15, 0, packet_intense[i], 0, map(j, 0, numLeds, cycle, 128 * packet_freq[i]) );
+      wave = beatsin8(5, 0, packet_intense[i], 0, map(j, 0, numLeds, cycle, 128 * packet_freq[i]) );
       led->addPixelColor(j, CHSV(packet_color[i], 255, wave) );
     }
   }
@@ -802,9 +793,9 @@ void Shows::plinko(uint8_t start_pos)
   if (isShowStart()) {
     for (i = 0; i < MAX_PLINKO; i++) {
       plink[i] = XX;  // Move plinkos off the board
-      makeWaitFaster(2);
+      makeWaitFaster(4);
     }
-    num_plinko = random(1, MAX_PLINKO);
+    num_plinko = random(3, MAX_PLINKO);
   }
 
   if (morph > 0) {
@@ -873,6 +864,7 @@ void Shows::bounce(void)
   if (isShowStart()) {
     num_balls = random(2, MAX_BALLS);
     clearTrails();
+    makeWaitFaster(4);
   }
 
   if (morph != 0) {
@@ -895,10 +887,10 @@ void Shows::bounce(void)
     }
 
     uint8_t old_dir = bounce_dir[n];
-    uint8_t max_attempts = 20;
+    uint8_t max_attempts = 10;
 
     while (led->getNeighbor(bounce_pos[n], bounce_dir[n]) == XX ||
-          (bounce_dir[n] + (num_neighbors / 2)) % num_neighbors == old_dir ||
+//          (bounce_dir[n] + (num_neighbors / 2)) % num_neighbors == old_dir ||
           random(0, num_neighbors * 3) == 0) {
       bounce_dir[n] = random(0, num_neighbors);  // HexGrid
         if (max_attempts-- == 0) {
@@ -922,6 +914,7 @@ void Shows::bounceGlowing(void)
   if (isShowStart()) {
     num_balls = random(2, MAX_BALLS);
     clearTrails();
+    makeWaitFaster(4);
   }
 
   if (morph != 0) {
@@ -953,7 +946,7 @@ void Shows::bounceGlowing(void)
     uint8_t max_attempts = 20;
 
     while (led->getNeighbor(bounce_pos[n], bounce_dir[n]) == XX ||
-          (bounce_dir[n] + (num_neighbors / 2)) % num_neighbors == old_dir ||
+//          (bounce_dir[n] + (num_neighbors / 2)) % num_neighbors == old_dir ||
           random(0, num_neighbors * 3) == 0) {
       bounce_dir[n] = random(0, num_neighbors);
         if (max_attempts-- == 0) {

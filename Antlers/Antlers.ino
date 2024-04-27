@@ -13,22 +13,22 @@
 //
 //  2 pins for clock and data of lights.
 // 
-#define dataPin 9       // 'yellow' wire
-#define clockPin 8      // 'green' wire
+#define dataPin 0 // 7 // 9       // 'yellow' wire
+#define clockPin 2 // 8 // 8      // 'green' wire
 
 #define numLights 18
 
 // Light colors
 
-#define COLOR 0
-#define BRIGHTNESS 1
+#define COLOR 60
+#define BRIGHTNESS 255
 #define YELLOW    20  // Yellow = 20
 #define START_BRIGHT 255  // 256 = Full brightness, 0 = BLACK
 
-#define FLICKER_CHANCE 1000 // one-in chance to start flicking
-#define BURST_CHANCE 25 // one-in chance a flicker is a burst
-#define MIN_SPEED 2
-#define MAX_SPEED 20
+#define FLICKER_CHANCE 10000 // one-in chance to start flicking
+#define BURST_CHANCE 100 // one-in chance a flicker is a burst
+#define MIN_SPEED 10
+#define MAX_SPEED 100
 
 // framebuffers
 int intense_buffer[numLights][2];    // 0 = color, 1 = brightness

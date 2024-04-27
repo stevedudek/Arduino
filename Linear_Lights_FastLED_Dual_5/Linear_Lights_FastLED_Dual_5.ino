@@ -14,14 +14,14 @@
 //
 //  11/20/2018
 //
-#define NUM_LEDS 16  // Chance of memory shortage for large NUM_LEDS
+#define NUM_LEDS 18  // Chance of memory shortage for large NUM_LEDS
 
-#define BRIGHTNESS  128 // (0-255)
+#define BRIGHTNESS  255 // (0-255)
 
 #define DELAY_TIME 40  // in milliseconds. FastLED demo has 8.3 ms delay!
 
-#define DATA_PIN 8
-#define CLOCK_PIN 9
+#define DATA_PIN 8 // 9
+#define CLOCK_PIN 8
 
 #define CHANNEL_A  0  // Don't change these
 #define CHANNEL_B  1

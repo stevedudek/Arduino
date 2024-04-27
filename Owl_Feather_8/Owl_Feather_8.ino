@@ -28,7 +28,7 @@
 uint8_t bright = 255;  // (0-255)
 uint8_t curr_bright = bright;
 
-uint8_t show_speed = 128;  // (0 = fast, 255 = slow)
+uint8_t show_speed = 64;  // (0 = fast, 255 = slow)
 
 #define DELAY_TIME 25  // in milliseconds (20ms=50fps, 25ms=40fps)
 #define SMOOTHING 1   // 0 = no smooth, lower the number = more smoothing
@@ -72,8 +72,8 @@ uint8_t head_current_show[] = { START_HEAD_SHOW_CHANNEL_A, START_HEAD_SHOW_CHANN
 #define NUM_HEAD_SHOWS 12
 
 // wait times apply to both the head and the body
-uint8_t show_duration = 10;  // Typically 30 seconds. Size problems at 1800+ seconds.
-uint8_t fade_amount = 128; // 0 = no fading, to 255 = always be fading
+uint8_t show_duration = 80;  // Typically 30 seconds. Size problems at 1800+ seconds.
+uint8_t fade_amount = 196; // 0 = no fading, to 255 = always be fading
 
 // Sections
 
@@ -288,7 +288,7 @@ void updateLeds() {
 
   //uint8_t intensity = ease8InOutApprox(shows[CHANNEL_A].get_intensity());
   uint8_t intensity = shows[CHANNEL_A].get_intensity();
-  //Serial.println(intensity);
+  Serial.println(intensity);
   morph_channels(intensity);  // morph together the 2 leds channels and deposit on to Channel_A
   morph_head_channels(intensity);
   FastLED.show();  // Update the display

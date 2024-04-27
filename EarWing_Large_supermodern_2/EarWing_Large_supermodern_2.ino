@@ -26,10 +26,10 @@ uint8_t show_speed = 128;  // (0 = fast, 255 = slow)
 #define SMOOTHING_SHOWS_VALUE  30   // Fastest turn off/on = DELAY_TIME * (255 / this value) = 150 ms
 
 #define DATA_PIN 0  //  11 // 7 // data = 7 (Teensy) or 0 (Feather)
-//#define CLOCK_PIN 2  //  13 // 8 // clock = 8 (Teensy) or 2 (Feather)
+#define CLOCK_PIN 2  //  13 // 8 // clock = 8 (Teensy) or 2 (Feather)
 
-#define NUM_LEDS 25  // 27 is too many
-#define ACTUAL_LEDS 52
+#define NUM_LEDS 84 // 25  // 27 is too many
+#define ACTUAL_LEDS 42 //  52
 
 #define XX  255
 
@@ -79,7 +79,8 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Start");
 
-  FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, ACTUAL_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.addLeds<DOTSTAR, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);  // Only 1 leds object
+//  FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, ACTUAL_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness( bright );
   
   // Set up the various mappings (1D lists in PROGMEM)

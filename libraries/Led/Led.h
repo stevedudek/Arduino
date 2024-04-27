@@ -25,8 +25,8 @@ class Led
       dimAllPixels(uint8_t amount);
     void
       setLedMap(uint8_t *led_map_pointer), turnOnLedMap(), turnOffLedMap(),
-      setCoordMap(uint8_t width, uint8_t *coord_pointer),
-      setNeighborMap(uint8_t *neighbor_map);
+      setCoordMap(uint8_t width, const uint8_t *coord_pointer),
+      setNeighborMap(const uint8_t *neighbor_map);
     uint8_t
       lookupLed(uint8_t i),
       getLedFromCoord(uint8_t x, uint8_t y),
@@ -63,7 +63,8 @@ class Led
       getInterpHSVthruRGB(CHSV c1, CHSV c2, uint8_t fract),
       smooth_color(CHSV old_color, CHSV new_color, uint8_t max_change);
     CRGB
-        getInterpRGB(CRGB c1, CRGB c2, uint8_t fract);
+        getInterpRGB(CRGB c1, CRGB c2, uint8_t fract),
+        smooth_rgb_color(CRGB old_color, CRGB new_color, uint8_t max_change);
     CHSV getInterpRGBthruHSV(CRGB c1, CRGB c2, uint8_t fract);
     void RGBtoHSV(uint8_t red, uint8_t green, uint8_t blue, float *h, float *s, float *v );
     void rgb2hsv_new(uint8_t src_r, uint8_t src_g, uint8_t src_b, uint8_t *dst_h, uint8_t *dst_s, uint8_t *dst_v);
@@ -76,33 +77,25 @@ class Led
       smooth(uint8_t old_value, uint8_t new_value, uint8_t max_change),
       smooth_wrap(uint8_t old_value, uint8_t new_value, uint8_t max_change);
     void
-      setPalette(uint8_t palette_start, uint8_t palette_width),  // turns palettes on
-      setPalette(void),  // turn palettes on with default values
       setOnlyRed(void);  // Use only purple-red-yellow colors
     void
-      turnPalettesOn(void), turnPalettesOff(void);
-    void
       setAsSquare(void), setAsPentagon(void);
-    void randomizePalette(void);
-    CHSV constrain_palette(CHSV color);
+
 
   private:
 
     // variables
-    uint8_t numLeds, width_2d;
+    uint16_t numLeds;
+    uint8_t width_2d;
 
-    CRGB *led_rgbs;
     CHSV *current_frame;
     CHSV *next_frame;
     CHSV *interp_frame;
 
     bool
-      canChangePalette, is_only_red;
+      is_only_red;
 
-    uint8_t
-      _palette_start, _palette_width;
-
-    uint8_t
+    const uint8_t
       *led_map, *coords, *neighbors;
 
     uint8_t blur_amount;

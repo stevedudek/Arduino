@@ -12,9 +12,9 @@
 //
 //  10/17/2018
 //
-#define NUM_LEDS 2
+#define NUM_LEDS 84
 
-#define BRIGHTNESS  255 // (0-255)
+#define BRIGHTNESS  48 // (0-255)
 
 #define DELAY_TIME 40 // in milliseconds
 
@@ -53,7 +53,7 @@ void setup() {
   Serial.begin(9600);
   Serial.println("Start");
 
-  FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);
+  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);  // Only 1 leds object
   FastLED.setBrightness( BRIGHTNESS );
   
   if (HAVE_NOISE) {

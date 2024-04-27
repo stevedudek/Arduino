@@ -33,7 +33,7 @@ class Noise
     void setNoiseValue(uint8_t, uint8_t, uint8_t);
 
     boolean _noise_on;
-    uint8_t _x_length;
+    uint8_t _max_x;
     uint8_t _noise_set;
     uint8_t _max_noise_a, _max_noise_b;
     uint8_t _noise_a_intense, _noise_b_intense;

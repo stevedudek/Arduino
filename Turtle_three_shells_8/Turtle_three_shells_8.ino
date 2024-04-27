@@ -16,10 +16,10 @@ uint8_t BRIGHTNESS = 255;  // (0-255) (ArduinoBlue)
 
 uint8_t DELAY_TIME = 15;  // in milliseconds (ArduinoBlue)
 long last_time;
-#define SMOOTHING 1   // 0 = no smooth, lower the number = more smoothing
+#define SMOOTHING 0   // 0 = no smooth, lower the number = more smoothing
 
-#define DATA_PIN 7  // Changed!
-#define CLOCK_PIN 8
+#define DATA_PIN 0  // 11 // 7  // Changed!
+#define CLOCK_PIN 2  // 13 // 8
 
 #define NUM_LEDS 29
 #define HALF_LEDS ((NUM_LEDS / 2) + 1)  // Half that number
@@ -32,8 +32,8 @@ long last_time;
 #define CHANNEL_B  1
 #define DUAL       2  // How many shows to run at once (dual = 2). Don't change.
 
-#define ARE_CONNECTED true  // Are the HEX talking to each other?
-#define IS_SPEAKING true  // true = speaking, false = hearing
+#define ARE_CONNECTED false  // Are the HEX talking to each other?
+#define IS_SPEAKING false  // true = speaking, false = hearing
 
 boolean is_lost = false;
 unsigned long last_connection = millis();

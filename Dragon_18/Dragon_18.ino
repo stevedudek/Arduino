@@ -38,7 +38,7 @@
 // import Hex shows: orbits, wipers, well, rain, vert_back_forth_colors, diag_back_forth_dots
 
 
-uint8_t section_list[] = { SECTION_A, SECTION_HEAD, SECTION_B, SECTION_TAIL };
+uint8_t section_list[] = { SECTION_HEAD, SECTION_A, SECTION_B, SECTION_TAIL };
 //uint8_t section_list[] = { SECTION_HEAD, SECTION_A, SECTION_B, SECTION_TAIL };
 
 // SCALES  { head: 86, a: 101, b: 97, tail: 47 }   // Include trailing LED in spacers

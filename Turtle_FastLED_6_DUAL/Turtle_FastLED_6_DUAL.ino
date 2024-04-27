@@ -15,12 +15,12 @@
 
 #define BRIGHTNESS  255 // (0-255)
 
-#define DELAY_TIME 40 // in milliseconds
+#define DELAY_TIME 12 // in milliseconds
 long last_time;
 #define SMOOTHING 1   // 0 = no smooth, lower the number = more smoothing
 
-#define DATA_PIN 9  // Changed!
-#define CLOCK_PIN 8
+#define DATA_PIN 7 // 0  // 9  // Changed!
+#define CLOCK_PIN 8  // 2  //  8
 
 #define NUM_LEDS 29
 #define HALF_LEDS ((NUM_LEDS / 2) + 1)  // Half that number

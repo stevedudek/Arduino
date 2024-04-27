@@ -15,11 +15,11 @@
 //
 #define NUM_LEDS 28
 
-#define BRIGHTNESS  64 // (0-255)
+#define BRIGHTNESS  48 // (0-255)
 
 #define DELAY_TIME 40 // in milliseconds
 
-#define DATA_PIN 9
+#define DATA_PIN 7
 #define CLOCK_PIN 8
 
 Led led = Led(NUM_LEDS);  // Class instantiation of the Led library
@@ -27,7 +27,7 @@ CRGB leds[NUM_LEDS];  // Hook for FastLED library
 Shows shows = Shows(&led);  // Show library
 
 // Palettes
-#define CAN_CHANGE_PALETTES true
+#define CAN_CHANGE_PALETTES false
 #define PALETTE_DURATION 300  // seconds between palettes
 
 // Shows - now enumerated
@@ -64,10 +64,6 @@ void setup() {
     noise.turnNoiseOn();
   } else {
     noise.turnNoiseOff();
-  }
-
-  if (CAN_CHANGE_PALETTES) {
-    led.setPalette();  // turns on palettes with default valets
   }
 
   // Set up the various mappings here (1D lists in PROGMEM)
@@ -128,9 +124,6 @@ void loop() {
 // change_it_up
 //
 void change_it_up() {
-  EVERY_N_SECONDS(PALETTE_DURATION) { 
-    led.randomizePalette(); 
-  }
   EVERY_N_SECONDS(WAIT_DURATION) { 
     shows.tweakWait();
   }

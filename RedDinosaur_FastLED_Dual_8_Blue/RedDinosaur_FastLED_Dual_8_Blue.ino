@@ -16,7 +16,7 @@
 //
 //  Dual shows - Blend together 2 shows running at once
 //
-uint8_t BRIGHTNESS = 128;  // (0-255) (ArduinoBlue)
+uint8_t BRIGHTNESS = 255;  // (0-255) (ArduinoBlue)
 
 uint8_t DELAY_TIME = 40;  // in milliseconds (ArduinoBlue)
 

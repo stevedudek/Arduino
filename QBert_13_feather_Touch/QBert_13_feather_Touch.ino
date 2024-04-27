@@ -73,7 +73,7 @@ uint32_t max_small_cycle = (show_duration * 2 * (1000 / DELAY_TIME));  // *2! 50
 #define   MESH_PASSWORD   "roarroar" // password for your MESH
 #define   MESH_PORT       5555 //default port
 
-#define ARE_CONNECTED true// Are the pentagons talking to each other?
+#define ARE_CONNECTED true  // Are the pentagons talking to each other?
 #define IS_SPEAKING false  // true = speaking, false = hearing
 
 boolean is_lost = false;

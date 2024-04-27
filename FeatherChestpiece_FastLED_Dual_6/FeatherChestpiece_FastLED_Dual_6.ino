@@ -23,8 +23,8 @@ uint8_t BRIGHTNESS = 255;  // (0-255) (ArduinoBlue)
 uint32_t timing[] = { millis(), millis() };  // last_time, last_connection
 #define SMOOTHING 1   // 0 = no smooth, lower the number = more smoothing
 
-#define DATA_PIN 7
-#define CLOCK_PIN 8
+#define DATA_PIN 0  // 7
+#define CLOCK_PIN 2  // 8
 
 #define CHANNEL_A  0  // Don't change these
 #define CHANNEL_B  1

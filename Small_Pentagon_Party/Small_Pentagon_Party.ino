@@ -14,7 +14,7 @@
 //  interpolate the two buffers on to the CRGB leds
 //
 
-uint8_t BRIGHTNESS = 128;  // (0-255) (ArduinoBlue)
+uint8_t BRIGHTNESS = 255;  // (0-255) (ArduinoBlue)
  
 uint8_t DELAY_TIME = 20;  // in milliseconds. A cycle takes 3-5 milliseconds. 15+ is safe.
 uint32_t timing[] = { millis(), millis() };  // last_time, last_connection
@@ -49,7 +49,7 @@ Shows shows[] = { Shows(&led[CHANNEL_A]), Shows(&led[CHANNEL_B]) };  // 2 Show l
 CRGB leds[NUM_LEDS];  // The Leds themselves
 CHSV led_buffer[NUM_LEDS];  // For smoothing
 
-#define ONLY_RED true  // (ArduinoBlue)
+#define ONLY_RED false  // (ArduinoBlue)
 uint8_t hue_start = 0;
 uint8_t hue_width = 255;
 uint8_t curr_lightning = 0;

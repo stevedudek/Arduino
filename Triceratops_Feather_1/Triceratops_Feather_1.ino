@@ -460,7 +460,7 @@ void updateLeds() {
         shows[i].randomFill();
         break;
       default:
-        shows[i].lightWave(shows[i].getForeColorSpeed());
+        shows[i].lightWave();
         break;
     }
   

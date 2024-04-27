@@ -16,7 +16,7 @@
 //
 //  Modernized
 //
-#define NUM_LEDS 36  // Chance of memory shortage for large NUM_LEDS
+#define NUM_LEDS 8  // Chance of memory shortage for large NUM_LEDS
 
 uint8_t BRIGHTNESS = 255;  // (0-255) (ArduinoBlue)
 
@@ -24,8 +24,8 @@ uint8_t DELAY_TIME = 30;  // in milliseconds (ArduinoBlue)
 long last_time;
 #define SMOOTHING 1   // 0 = no smooth, lower the number = more smoothing
 
-#define DATA_PIN 7
-#define CLOCK_PIN 8
+#define DATA_PIN 0  // 7
+#define CLOCK_PIN 2  //  8
 
 #define CHANNEL_A  0  // Don't change these
 #define CHANNEL_B  1

@@ -17,12 +17,12 @@
 #define NUM_LEDS 60  // Chance of memory shortage for large NUM_LEDS
 #define SYM_LEDS 30  // NUM_LEDS / 2, rounded up (do this yourself)
 
-#define BRIGHTNESS  255 // (0-255)
+#define BRIGHTNESS  96 // (0-255)
 
 #define DELAY_TIME 40  // in milliseconds. FastLED demo has 8.3 ms delay!
 
-#define DATA_PIN 9
-#define CLOCK_PIN 8
+#define DATA_PIN 0  // 9
+#define CLOCK_PIN 2  //  8
 
 #define CHANNEL_A  0  // Don't change these
 #define CHANNEL_B  1
@@ -54,7 +54,8 @@ void setup() {
 
   randomSeed(analogRead(0));
   
-  Serial.begin(9600);
+//  Serial.begin(9600);
+  Serial.begin(115200);
   Serial.println("Start");
 
   FastLED.addLeds<DOTSTAR, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);  // Only 1 leds object

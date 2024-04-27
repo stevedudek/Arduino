@@ -15,11 +15,11 @@
 #define NUM_LEDS 32
 #define ACTUAL_LEDS 64
 
-#define BRIGHTNESS  64 // (0-255)
+#define BRIGHTNESS  255 // (0-255)
 
 #define DELAY_TIME 40  // in milliseconds. FastLED demo has 8.3 ms delay!
 
-#define DATA_PIN 7
+#define DATA_PIN 2
 
 #define CHANNEL_A  0  // Don't change these
 #define CHANNEL_B  1
@@ -39,8 +39,8 @@ uint8_t current_show[] = { START_SHOW_CHANNEL_A, START_SHOW_CHANNEL_B };
 #define NUM_SHOWS 12
 
 // Clocks and time
-#define SHOW_DURATION 30  // seconds
-#define FADE_TIME 30   // seconds to fade in. If FADE_TIME = SHOW_DURATION, then Always Be Fading
+#define SHOW_DURATION 60  // seconds
+#define FADE_TIME 60   // seconds to fade in. If FADE_TIME = SHOW_DURATION, then Always Be Fading
 uint32_t MAX_SMALL_CYCLE = SHOW_DURATION * 2 * (1000 / DELAY_TIME);  // *2! 50% = all on, 50% = all off, and rise + decay on edges
 #define FADE_CYCLES  (FADE_TIME * 1000 / DELAY_TIME)  // cycles to fade in + out
 
@@ -59,7 +59,7 @@ void setup() {
   Serial.begin(9600);
   Serial.println("Start");
 
-  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, ACTUAL_LEDS);;  // Only 1 leds object
+  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, ACTUAL_LEDS);  // Only 1 leds object
   FastLED.setBrightness( BRIGHTNESS );
 
   // Set up the various mappings here (1D lists in PROGMEM)

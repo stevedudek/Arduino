@@ -1,5 +1,7 @@
 //
-//  Led.cpp - Handles morphing, RGB/HSV interpolation, and color palettes
+//  Led.cpp - Handles morphing, RGB/HSV interpolation
+//
+//  USE THIS REPO
 //
 #include <FastLED.h>
 
@@ -15,20 +17,17 @@ Led::Led(uint8_t i)
 {
   numLeds = i;
 
-  current_frame = (CHSV *)calloc(i, sizeof(CHSV));
-  next_frame = (CHSV *)calloc(i, sizeof(CHSV));
-  interp_frame = (CHSV *)calloc(i, sizeof(CHSV));
+  current_frame = (CHSV *)calloc(numLeds, sizeof(CHSV));
+  next_frame = (CHSV *)calloc(numLeds, sizeof(CHSV));
+  interp_frame = (CHSV *)calloc(numLeds, sizeof(CHSV));
 
   is_only_red = false;
-  turnPalettesOff();  // Palettes default to off
 
   is_mapped = false;
   is_2d_mapped = false;
   is_neighbor_mapped = false;
 
-  turnOffBlur();
-
-  num_neighbors = 6;
+  num_neighbors = 6;  // Default to hexagonal
 }
 
 //
@@ -362,80 +361,30 @@ void Led::setAsPentagon(void)
 void Led::setOnlyRed(void)
 {
   is_only_red = true;
-  turnPalettesOff();
-}
-
-void Led::setPalette(uint8_t palette_start, uint8_t palette_width)
-{
-  _palette_start = palette_start;
-  _palette_width = palette_width;
-  turnPalettesOn();
-}
-
-void Led::setPalette()
-{
-  setPalette(0, 255);  // palette_start, palette_width
-}
-
-void Led::turnPalettesOn(void)
-{
-  canChangePalette = true;
-}
-
-void Led::turnPalettesOff(void)
-{
-  canChangePalette = false;
-}
-
-void Led::randomizePalette(void)
-{
-  _palette_start = random8(255);
-  _palette_width = random8(10, 255);
-}
-
-CHSV Led::constrain_palette(CHSV color)
-{
-  if (!canChangePalette) {
-    return color;
-  }
-  uint8_t hue = map8(sin8(color.h), _palette_start, (_palette_start + _palette_width) % 256);
-  CHSV new_color = CHSV(hue, color.s, color.v);
-  return new_color;
 }
 
 CHSV Led::getInterpHSV(CHSV c1, CHSV c2, uint8_t fract)
 {
-  // Includes palette adjustment
   if (c1 == c2) {
     return c1;
   } else if (fract == 0) {
     return c1;
   } else if (fract == 255) {
     return c2;
+  } else if (is_black(c1)) {
+    return CHSV(c2.h, c2.s, interpolate(c1.v, c2.v, fract));  // safe approach
+  } else if (is_black(c2)) {
+    return CHSV(c1.h, c1.s, interpolate(c1.v, c2.v, fract));  // safe approach
   } else {
-//    return getInterpHSVthruRGB(c1, c2, fract);
-//    color = CHSV(interpolate_wrap(c1.h, c2.h, fract),
-//                 255,  // s
-//                 interpolate(c1.v, c2.v, fract)
-//                );
-//  // Correct approach below does not work well for blacks
-//  } else if (is_black(c1)) {
-//    color = CHSV(c2.h, c2.s, interpolate(c1.v, c2.v, fract));  // safe approach
-//  } else if (is_black(c2)) {
-//    color = CHSV(c1.h, c1.s, interpolate(c1.v, c2.v, fract));  // safe approach
-//  } else {
-//    color = getInterpHSVthruRGB(c1, c2, fract);  // Much sadness: this does not work
     return CHSV(interpolate_wrap(c1.h, c2.h, fract),
-                 interpolate(c1.s, c2.s, fract),
-                 interpolate(c1.v, c2.v, fract)
-                );
+                interpolate(c1.s, c2.s, fract),  // Always saturated?
+                interpolate(c1.v, c2.v, fract)
+               );
   }
-//  return constrain_palette(color);  // palette adjustment
 }
 
 CHSV Led::getInterpHSV(CHSV c1, CHSV c2, CHSV old_color, uint8_t fract)
 {
-  // Includes palette adjustment
   if (c1 == c2) {
     return c1;
   } else if (fract == 0) {
@@ -443,29 +392,16 @@ CHSV Led::getInterpHSV(CHSV c1, CHSV c2, CHSV old_color, uint8_t fract)
   } else if (fract == 255) {
     return c2;
   } else {
-//    return getInterpHSVthruRGB(c1, c2, fract);
-//    color = CHSV(interpolate_wrap(c1.h, c2.h, fract),
-//                 255,  // s
-//                 interpolate(c1.v, c2.v, fract)
-//                );
-//  // Correct approach below does not work well for blacks
-//  } else if (is_black(c1)) {
-//    color = CHSV(c2.h, c2.s, interpolate(c1.v, c2.v, fract));  // safe approach
-//  } else if (is_black(c2)) {
-//    color = CHSV(c1.h, c1.s, interpolate(c1.v, c2.v, fract));  // safe approach
-//  } else {
-//    color = getInterpHSVthruRGB(c1, c2, fract);  // Much sadness: this does not work
+
     return CHSV(interpolate_wrap(c1.h, c2.h, old_color.h, fract),
-                 interpolate(c1.s, c2.s, fract),
-                 interpolate(c1.v, c2.v, fract)
-                );
+                255, // Always saturated
+                interpolate(c1.v, c2.v, fract)
+               );
   }
-//  return constrain_palette(color);  // palette adjustment
 }
 
 CRGB Led::getInterpRGB(CRGB c1, CRGB c2, uint8_t fract)
 {
-  fract = ease8InOutQuad(fract);
   // Simple CRGB interpolation
   return CRGB(interpolate(c1.r, c2.r, fract),
               interpolate(c1.g, c2.g, fract),
@@ -540,10 +476,13 @@ uint8_t Led::interpolate_wrap(uint8_t a, uint8_t b, uint8_t fract)
 
 uint8_t Led::smooth(uint8_t old_value, uint8_t new_value, uint8_t max_change)
 {
-  if (new_value >= old_value) {
-    return old_value + min(max_change, new_value - old_value);
+  if (new_value == old_value) {
+    return new_value;
+  }
+  if (new_value > old_value) {
+    return old_value + min(int(max_change), int(new_value - old_value));
   } else {
-    return old_value - min(max_change, old_value - new_value);
+    return old_value - min(int(max_change), int(old_value - new_value));
   }
 }
 
@@ -571,7 +510,14 @@ CHSV Led::smooth_color(CHSV old_color, CHSV new_color, uint8_t max_change)
   // Should I worry about saturation and value?
   return CHSV(smooth_wrap(old_color.h, new_color.h, max_change),
               new_color.s,
-              smooth(old_color.v, new_color.v, min(max_change * 4, 255)));
+              smooth(old_color.v, new_color.v, 20));
+}
+
+CRGB Led::smooth_rgb_color(CRGB old_color, CRGB new_color, uint8_t max_change)
+{
+  return CRGB(smooth(old_color.r, new_color.r, max_change),
+              smooth(old_color.g, new_color.g, max_change),
+              smooth(old_color.b, new_color.b, max_change));
 }
 
 void Led::setLedMap(uint8_t *led_map_pointer)
@@ -583,7 +529,7 @@ void Led::setLedMap(uint8_t *led_map_pointer)
   is_mapped = true;
 }
 
-void Led::setCoordMap(uint8_t width, uint8_t *coord_pointer)
+void Led::setCoordMap(uint8_t width, const uint8_t *coord_pointer)
 {
   // coord_map should be stored on the client as:
   //   const uint8_t coords[] PROGMEM = {
@@ -594,7 +540,7 @@ void Led::setCoordMap(uint8_t width, uint8_t *coord_pointer)
   is_2d_mapped = true;
 }
 
-void Led::setNeighborMap(uint8_t *neighbor_map)
+void Led::setNeighborMap(const uint8_t *neighbor_map)
 {
   // neighbor_map should be stored on the client as:
   //   const uint8_t neighbors[] PROGMEM = {

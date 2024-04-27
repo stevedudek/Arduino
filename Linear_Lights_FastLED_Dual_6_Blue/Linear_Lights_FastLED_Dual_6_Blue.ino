@@ -22,8 +22,8 @@ uint8_t BRIGHTNESS = 255;  // (0-255) (ArduinoBlue)
 
 uint8_t DELAY_TIME = 30;  // in milliseconds (ArduinoBlue)
 
-#define DATA_PIN 8
-#define CLOCK_PIN 9
+#define DATA_PIN 7
+#define CLOCK_PIN 8
 
 #define CHANNEL_A  0  // Don't change these
 #define CHANNEL_B  1
@@ -285,5 +285,3 @@ void check_phone() {
   
   if (buttonId == BAM_BUTTON) { curr_lightning = BOLT_TIME; }
 }
-
-
