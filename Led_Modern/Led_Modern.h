@@ -8,30 +8,32 @@ class Led
 {
   public:
 
-    Led(uint8_t i);
+    Led(uint16_t i);
 
-    uint8_t
+    uint16_t
       getNumLeds(void);
     void
       fill(CHSV color),
       fillHue(uint8_t hue),
       fillBlack(void);
     void
-      setPixelColor(uint8_t i, CHSV color), setPixelColorNoMap(uint8_t i, CHSV color),
-      setPixelHue(uint8_t i, uint8_t hue), setPixelHueNoMap(uint8_t i, uint8_t hue),
-      increasePixelHue(uint8_t i, uint8_t increase),
-      setPixelBlack(uint8_t i), setPixelBlackNoMap(uint8_t i);
+      setPixelColor(uint16_t i, CHSV color), setPixelColorNoMap(uint16_t i, CHSV color),
+      setCurrentFrame(uint16_t i, CHSV color),
+      setPixelHue(uint16_t i, uint8_t hue), setPixelHueNoMap(uint16_t i, uint8_t hue),
+      increasePixelHue(uint16_t i, uint8_t increase),
+      setPixelBlack(uint16_t i), setPixelBlackNoMap(uint16_t i);
     void
-      dimPixel(uint8_t i, uint8_t amount),
+      dimPixel(uint16_t i, uint8_t amount),
       dimAllPixels(uint8_t amount);
     void
       setLedMap(uint8_t *led_map_pointer), turnOnLedMap(), turnOffLedMap(),
       setCoordMap(uint8_t width, const uint8_t *coord_pointer),
       setNeighborMap(const uint8_t *neighbor_map);
     uint8_t
-      lookupLed(uint8_t i),
       getLedFromCoord(uint8_t x, uint8_t y),
       getNeighbor(uint8_t pos, uint8_t dir);
+    uint16_t
+      lookupLed(uint16_t i);
     uint8_t
       getSymmetry(void);
     void
@@ -39,9 +41,9 @@ class Led
     void
       smooth_frame(uint8_t max_change), push_frame(void);
     void
-      addPixelColor(uint8_t i, CHSV c2), addPixelColorNoMap(uint8_t i, CHSV c2);
+      addPixelColor(uint16_t i, CHSV c2), addPixelColorNoMap(uint16_t i, CHSV c2);
     CHSV
-      getCurrFrameColor(uint8_t i), getNextFrameColor(uint8_t i);
+      getCurrFrameColor(uint16_t i), getNextFrameColor(uint16_t i);
     CHSV
       wheel(uint8_t hue),
       gradient_wheel(uint8_t hue, uint8_t intensity);
@@ -67,7 +69,7 @@ class Led
   private:
 
     // variables
-    uint8_t numLeds;
+    uint16_t numLeds;
     uint8_t width_2d;
 
     CHSV *current_frame;

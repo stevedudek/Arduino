@@ -16,18 +16,16 @@ class Shows
       morphChain(void), sawTooth(void), confetti(void),
       lightWave(void), lightRunUp(void),
       bounce(void), bounceGlowing(void), plinko(uint8_t start_pos),
-      sinelon_fastled(void), bpm_fastled(void), juggle_fastled(void),
-      kitt(void), fireflies(void), sparkfire(void), edgeburst(void),
-      sunrise(void), halloween_color_twinkle(void);
+      sinelon_fastled(void), bpm_fastled(void), juggle_fastled(void);
     void
       setForeColor(uint8_t c), setBackColor(uint8_t c),
       setForeColorSpeed(uint8_t amount), setBackColorSpeed(uint8_t amount),
       IncForeColor(uint8_t amount), IncBackColor(uint8_t amount);
     void
-      setPixeltoForeColor(uint8_t i), setPixeltoBackColor(uint8_t i),
-      setPixeltoHue(uint8_t i, uint8_t h),
-      setPixeltoBlack(uint8_t i), setPixeltoForeBlack(uint8_t i), setPixeltoBackBlack(uint8_t i),
-      setPixeltoColor(uint8_t i, CHSV color), addPixelColor(uint8_t i, CHSV color);
+      setPixeltoForeColor(uint16_t i), setPixeltoBackColor(uint16_t i),
+      setPixeltoHue(uint16_t i, uint8_t h),
+      setPixeltoBlack(uint16_t i), setPixeltoForeBlack(uint16_t i), setPixeltoBackBlack(uint16_t i),
+      setPixeltoColor(uint16_t i, CHSV color), addPixelColor(uint16_t i, CHSV color);
     void
       fill(CHSV color), fillForeColor(void), fillBackColor(void),
       fillBlack(void), fillForeBlack(void), fillBackBlack(void);
@@ -41,8 +39,7 @@ class Shows
       dimAllPixels(uint8_t dim_amount), dimAllPixelsFrames(uint8_t frames),
       checkCycleClock(void), resetAllClocks(void);
     void
-      resetNumLeds(uint8_t i);
-      // setBandsBpm(uint8_t bands_min, uint8_t bands_max);
+      resetNumLeds(uint16_t i);
     void
       setColorSpeedMinMax(void), pickRandomColorSpeeds(void),
       pickCycleDuration(void), pickRandomCycleDuration(uint16_t min_duration, uint16_t max_duration),
@@ -60,9 +57,9 @@ class Shows
       IncColor(uint8_t hue, uint8_t amount),
       up_or_down(uint8_t value, uint8_t min_value, uint8_t max_value);
     uint8_t
-      getCyclesPerFrame(void), getMorphFract(void), get_intensity(void), getNumLeds(void);
+      getCyclesPerFrame(void), getMorphFract(void), get_intensity(void);
     uint16_t
-      getCycle(void), getCycleDuration(void), delta(void),
+      getNumLeds(void), getCycle(void), getCycleDuration(void), delta(void),
       getElapsedCycleTime(void);
     uint32_t
       getSmallCycle(void), getElapsedShowTime(void);
@@ -79,8 +76,9 @@ class Shows
     // private variables
     Led* led;  // Important hook back to the LEDs
 
+    uint16_t numLeds;
     uint8_t
-      numLeds, num_neighbors, channel;  // 0 or 1
+      num_neighbors, channel;  // 0 or 1
 
     uint8_t foreColor = 128;
     uint8_t backColor = 0;
@@ -105,22 +103,11 @@ class Shows
       color_speed_min, color_speed_max, show_speed;
 
     uint8_t *memory;
-    float
-      *global_memory, *float_memory;
 
     void
-      setMemory(uint8_t value, uint16_t position),
-      setMemoryArray(uint8_t value, uint8_t position, uint8_t array),
-      setFloatMemoryArray(float value, uint8_t position, uint8_t array),
-      setGlobal(float value, uint8_t position),
-      addGlobal(float addition, uint8_t position),
-      multiplyGlobal(float multiplier, uint8_t position);
+      setMemory(uint8_t value, uint8_t position);
     uint8_t
-      getMemory(uint8_t position),
-      getMemoryArray(uint8_t position, uint8_t array);
-    float
-      getGlobal(uint8_t position),
-      getFloatMemoryArray(uint8_t position, uint8_t array);
+      getMemory(uint8_t position);
 
     uint8_t
       getNumBalls(void), getBallPos(uint8_t ball), getBallDir(uint8_t ball);

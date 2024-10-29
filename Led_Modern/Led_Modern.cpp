@@ -10,12 +10,13 @@
 #include "Led_Modern.h"  // include this library's description file
 
 #define BLACK  CHSV(0, 0, 0)
-#define XX   255  // Out of bounds
+#define XX     255  // Out of bounds
+#define XXXX   900  // Out of bounds
 
 //
 // Constructor
 //
-Led::Led(uint8_t i)
+Led::Led(uint16_t i)
 {
   numLeds = i;
 
@@ -26,83 +27,91 @@ Led::Led(uint8_t i)
 //
 // Public Methods //////////////////////////////////////////////////////////////
 //
-uint8_t Led::getNumLeds(void)
+uint16_t Led::getNumLeds(void)
 {
   return numLeds;
 }
 
 void Led::fill(CHSV color)
 {
-  for (uint8_t i = 0; i < numLeds; i++) {
+  for (uint16_t i = 0; i < numLeds; i++) {
     setPixelColor(i, color);
   }
 }
 
 void Led::fillHue(uint8_t hue)
 {
-  for (uint8_t i = 0; i < numLeds; i++) {
+  for (uint16_t i = 0; i < numLeds; i++) {
     setPixelHue(i, hue);
   }
 }
 
 void Led::fillBlack(void)
 {
-  for (uint8_t i = 0; i < numLeds; i++) {
+  for (uint16_t i = 0; i < numLeds; i++) {
     setPixelColor(i, BLACK);
   }
 }
 
-void Led::setPixelColor(uint8_t i, CHSV color)
+void Led::setPixelColor(uint16_t i, CHSV color)
 {
-  if (i != XX) {
+  if (i != XXXX) {
+    next_frame[i] = color;
     next_frame[lookupLed(i)] = color;
   }
 }
 
-void Led::setPixelHue(uint8_t i, uint8_t hue)
+void Led::setCurrentFrame(uint16_t i, CHSV color)
+{
+  if (i != XXXX) {
+    current_frame[lookupLed(i)] = color;
+  }
+}
+
+void Led::setPixelHue(uint16_t i, uint8_t hue)
 {
   setPixelColor(i, wheel(hue));
 }
 
-void Led::setPixelBlack(uint8_t i)
+void Led::setPixelBlack(uint16_t i)
 {
   setPixelColor(i, BLACK);
 }
 
-void Led::setPixelColorNoMap(uint8_t i, CHSV color)
+void Led::setPixelColorNoMap(uint16_t i, CHSV color)
 {
-  if (i != XX) {
+  if (i != XXXX) {
     next_frame[i] = color;
   }
 }
 
-void Led::setPixelHueNoMap(uint8_t i, uint8_t hue)
+void Led::setPixelHueNoMap(uint16_t i, uint8_t hue)
 {
   setPixelColorNoMap(i, wheel(hue));
 }
 
-void Led::setPixelBlackNoMap(uint8_t i)
+void Led::setPixelBlackNoMap(uint16_t i)
 {
   setPixelColorNoMap(i, BLACK);
 }
 
-void Led::dimPixel(uint8_t i, uint8_t amount)
+void Led::dimPixel(uint16_t i, uint8_t amount)
 {
-  if (i != XX) {
+  if (i != XXXX) {
     next_frame[lookupLed(i)].v = scale8(next_frame[lookupLed(i)].v, 255 - amount);
   }
 }
 
 void Led::dimAllPixels(uint8_t amount)
 {
-  for (uint8_t i = 0; i < numLeds; i++) {
+  for (uint16_t i = 0; i < numLeds; i++) {
     dimPixel(i, amount);
   }
 }
 
-void Led::increasePixelHue(uint8_t i, uint8_t increase)
+void Led::increasePixelHue(uint16_t i, uint8_t increase)
 {
-  if (i != XX) {
+  if (i != XXXX) {
     next_frame[i].h += increase;
   }
 }
@@ -110,22 +119,22 @@ void Led::increasePixelHue(uint8_t i, uint8_t increase)
 // Don't interpolate. Try to force the current frame into next frame with smoothing.
 void Led::smooth_frame(uint8_t max_change)
 {
-  for (uint8_t i = 0; i < numLeds; i++) {
+  for (uint16_t i = 0; i < numLeds; i++) {
     current_frame[i] = smooth_color(current_frame[i], next_frame[i], max_change, max_change);
   }
 }
 
 void Led::push_frame(void)
 {
-  for (uint8_t i = 0; i < numLeds; i++) {
+  for (uint16_t i = 0; i < numLeds; i++) {
     current_frame[i] = next_frame[i];
   }
 }
 
-void Led::addPixelColor(uint8_t i, CHSV c2)
+void Led::addPixelColor(uint16_t i, CHSV c2)
 {
   // Pick the dominant color (c1 vs. c2) by value, instead of morphing them
-  if (i != XX) {
+  if (i != XXXX) {
     CHSV c1 = next_frame[lookupLed(i)];
 
     if (c1.v > c2.v) {
@@ -136,10 +145,10 @@ void Led::addPixelColor(uint8_t i, CHSV c2)
   }
 }
 
-void Led::addPixelColorNoMap(uint8_t i, CHSV c2)
+void Led::addPixelColorNoMap(uint16_t i, CHSV c2)
 {
   // Pick the dominant color (c1 vs. c2) by value, instead of morphing them
-  if (i != XX) {
+  if (i != XXXX) {
     CHSV c1 = next_frame[i];
 
     if (c1.v > c2.v) {
@@ -150,12 +159,12 @@ void Led::addPixelColorNoMap(uint8_t i, CHSV c2)
   }
 }
 
-CHSV Led::getCurrFrameColor(uint8_t i)
+CHSV Led::getCurrFrameColor(uint16_t i)
 {
   return current_frame[i];
 }
 
-CHSV Led::getNextFrameColor(uint8_t i)
+CHSV Led::getNextFrameColor(uint16_t i)
 {
   return next_frame[i];
 }
@@ -386,7 +395,7 @@ void Led::setOnlyRed(void)
 void Led::setLedMap(uint8_t *led_map_pointer)
 {
   // led_map should be stored on the client as:
-  //   const uint8_t LedMap[] PROGMEM = {
+  //   const uint16_t LedMap[] PROGMEM = {
   //
   led_map = led_map_pointer;
   is_mapped = true;
@@ -395,7 +404,7 @@ void Led::setLedMap(uint8_t *led_map_pointer)
 void Led::setCoordMap(uint8_t width, const uint8_t *coord_pointer)
 {
   // coord_map should be stored on the client as:
-  //   const uint8_t coords[] PROGMEM = {
+  //   const uint16_t coords[] PROGMEM = {
   //     XX,XX, 1, 0,XX,XX,XX,  // etc.
   // 1D array of 2D data. -1 = no LED
   coords = coord_pointer;
@@ -406,7 +415,7 @@ void Led::setCoordMap(uint8_t width, const uint8_t *coord_pointer)
 void Led::setNeighborMap(const uint8_t *neighbor_map)
 {
   // neighbor_map should be stored on the client as:
-  //   const uint8_t neighbors[] PROGMEM = {
+  //   const uint16_t neighbors[] PROGMEM = {
   //      XX,6,7,XX,XX,XX, // 0
   //      XX,6,7,XX,XX,XX, // 1  etc.
   // one row of 6 values per hexagonal pixel:
@@ -416,7 +425,7 @@ void Led::setNeighborMap(const uint8_t *neighbor_map)
   is_neighbor_mapped = true;
 }
 
-uint8_t Led::lookupLed(uint8_t i)
+uint16_t Led::lookupLed(uint16_t i)
 {
   if (is_mapped) {
     return pgm_read_byte_near(led_map + i);
@@ -437,7 +446,7 @@ void Led::turnOnLedMap()
 
 uint8_t Led::getNeighbor(uint8_t pos, uint8_t dir)
 {
-  if (is_neighbor_mapped && pos != XX) {
+  if (is_neighbor_mapped && pos != XXXX) {
     return pgm_read_byte_near(neighbors + (pos * num_neighbors) + (dir % num_neighbors));
   } else {
     return pos;  // Dummy default will show strange behaviour

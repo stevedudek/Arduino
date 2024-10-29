@@ -32,15 +32,14 @@
 
 #define MAX_COLOR  256
 
-#define MEMORY       4   // allocate numLeds * MEMORY bytes. Cannot be < 2!
-#define FLOAT_MEMORY 3   // allocate numLeds * FLOAT_MEMORY floats
-#define MAX_GLOBALS 10
+#define MEMORY     100   // allocate MEMORY bytes
 
 #define MAX_PLINKO  15
 #define MAX_BALLS    4
 #define MAX_PACKETS  3
 
-#define XX   255  // Out of bounds — be careful about 8-bit vs. 16-bit XX
+#define XX     255  // Out of bounds — be careful about 8-bit vs. 16-bit XX
+#define XXXX   900  // Out of bounds — be careful about 8-bit vs. 16-bit XX
 
 //
 // Constructor
@@ -52,9 +51,7 @@ Shows::Shows(Led* led_pointer, uint8_t c)
   led = new Led(*led_pointer);
   numLeds = led->getNumLeds();
 
-  memory = (uint8_t *)calloc(numLeds * MEMORY, sizeof(uint8_t));
-  global_memory = (float *)calloc(MAX_GLOBALS, sizeof(float));
-  float_memory = (float *)calloc(numLeds * FLOAT_MEMORY, sizeof(float));
+  memory = (uint8_t *)calloc(MEMORY, sizeof(uint8_t));
 
   resetAllClocks();
   setColorSpeedMinMax();
@@ -185,42 +182,42 @@ uint8_t Shows::getBackColorSpeed(void)
   return backColorSpeed;
 }
 
-void Shows::setPixeltoForeColor(uint8_t i)
+void Shows::setPixeltoForeColor(uint16_t i)
 {
   led->setPixelHue(i, foreColor);
 }
 
-void Shows::setPixeltoBackColor(uint8_t i)
+void Shows::setPixeltoBackColor(uint16_t i)
 {
   led->setPixelHue(i, backColor);
 }
 
-void Shows::setPixeltoHue(uint8_t i, uint8_t h)
+void Shows::setPixeltoHue(uint16_t i, uint8_t h)
 {
   led->setPixelHue(i, h);
 }
 
-void Shows::setPixeltoBlack(uint8_t i)
+void Shows::setPixeltoBlack(uint16_t i)
 {
   led->setPixelBlack(i);
 }
 
-void Shows::setPixeltoForeBlack(uint8_t i)
+void Shows::setPixeltoForeBlack(uint16_t i)
 {
   led->setPixelColor(i, getForeBlack());
 }
 
-void Shows::setPixeltoBackBlack(uint8_t i)
+void Shows::setPixeltoBackBlack(uint16_t i)
 {
   led->setPixelColor(i, getBackBlack());
 }
 
-void Shows::setPixeltoColor(uint8_t i, CHSV color)
+void Shows::setPixeltoColor(uint16_t i, CHSV color)
 {
   led->setPixelColor(i, color);
 }
 
-void Shows::addPixelColor(uint8_t i, CHSV color)
+void Shows::addPixelColor(uint16_t i, CHSV color)
 {
   led->addPixelColor(i, color);
 }
@@ -260,12 +257,12 @@ void Shows::setSmallCycleHalfway(void)
   start_show_time = millis() - (show_duration * 1000 / 2);
 }
 
-void Shows::resetNumLeds(uint8_t i)
+void Shows::resetNumLeds(uint16_t i)
 {
   numLeds = i;
 }
 
-uint8_t Shows::getNumLeds(void)
+uint16_t Shows::getNumLeds(void)
 {
   return numLeds;
 }
@@ -504,10 +501,10 @@ void Shows::randomFlip(void)
 {
   if (isShowStart()) {
     turnOnMorphing();
-    uint8_t fast_change = map8(numLeds, 100, 20);
+    uint8_t fast_change = map8(min(uint16_t(255), numLeds), 100, 20);
     pickRandomCycleDuration(fast_change, fast_change * 5);
 
-    for (uint8_t i = 0; i < numLeds; i++) {
+    for (uint16_t i = 0; i < numLeds; i++) {
       if (random8(2) == 0) {
         setPixeltoForeBlack(i);
       } else {
@@ -517,7 +514,7 @@ void Shows::randomFlip(void)
   }
 
   if (isCycleStart()) {
-    uint8_t pixel = random8(numLeds);
+    uint16_t pixel = random(numLeds);
     if (led->getNextFrameColor(pixel).v == 0) {
       setPixeltoForeColor(pixel);
     } else {
@@ -530,12 +527,12 @@ void Shows::randomColors(void)
 {
   if (isShowStart()) {  // Start of show: assign lights to random colors
     turnOffMorphing();
-    for (uint8_t i = 0; i < numLeds; i++) {
+    for (uint16_t i = 0; i < numLeds; i++) {
       setPixeltoHue(i, random8());
     }
   }
   if (backColorSpeed != 0 && getSmallCycle() % backColorSpeed == 0) {
-    for (uint8_t i = 0; i < numLeds; i++) {
+    for (uint16_t i = 0; i < numLeds; i++) {
       led->increasePixelHue(i, 1);
     }
   }
@@ -545,7 +542,7 @@ void Shows::randomOneColorBlack(void)
 {
   if (isShowStart()) {  // Start of show: assign lights to random colors
     turnOffMorphing();
-    for (uint8_t i = 0; i < numLeds; i++) {
+    for (uint16_t i = 0; i < numLeds; i++) {
       if(random8(2) == 0) {
         setPixeltoForeColor(i);
       } else {
@@ -554,7 +551,7 @@ void Shows::randomOneColorBlack(void)
     }
   }
   if (backColorSpeed != 0 && getSmallCycle() % backColorSpeed == 0) {
-    for (uint8_t i = 0; i < numLeds; i++) {
+    for (uint16_t i = 0; i < numLeds; i++) {
       led->increasePixelHue(i, 1);
     }
   }
@@ -564,7 +561,7 @@ void Shows::randomTwoColorBlack(void)
 {
   if (isShowStart()) {  // Start of show: assign lights to random colors
     turnOffMorphing();
-    for (uint8_t i = 0; i < numLeds; i++) {
+    for (uint16_t i = 0; i < numLeds; i++) {
       switch (random8(3)) {
         case 0:
           setPixeltoForeColor(i);
@@ -579,7 +576,7 @@ void Shows::randomTwoColorBlack(void)
     }
   }
   if (backColorSpeed != 0 && getSmallCycle() % backColorSpeed == 0) {
-    for (uint8_t i = 0; i < numLeds; i++) {
+    for (uint16_t i = 0; i < numLeds; i++) {
       led->increasePixelHue(i, 1);
     }
   }
@@ -589,7 +586,7 @@ void Shows::twoColor(void)
 {
   if (isShowStart()) {  // Start of show: assign lights to random colors
     turnOffMorphing();
-    for (uint8_t i = 0; i < numLeds; i++) {
+    for (uint16_t i = 0; i < numLeds; i++) {
       if(random8(2) == 0) {
         setPixeltoForeColor(i);
       } else {
@@ -598,7 +595,7 @@ void Shows::twoColor(void)
     }
   }
   if (backColorSpeed != 0 && getSmallCycle() % backColorSpeed == 0) {
-    for (uint8_t i = 0; i < numLeds; i++) {
+    for (uint16_t i = 0; i < numLeds; i++) {
       led->increasePixelHue(i, 1);
     }
   }
@@ -612,7 +609,7 @@ void Shows::stripes(void)
   }
   if (isCycleStart()) {
     uint8_t stripe_width = getMemory(0);
-    for (uint8_t i = 0; i < numLeds; i++) {
+    for (uint16_t i = 0; i < numLeds; i++) {
       if((i % stripe_width) % 2) {
         setPixeltoForeColor(i);
       } else {
@@ -630,8 +627,8 @@ void Shows::morphChain(void)
   }
 
   if (isCycleStart()) {
-    for (uint8_t i = 0; i < numLeds; i++) {
-      uint8_t color_add = sin8_C((i / map8(numLeds, 1, 10)) + cycle);
+    for (uint16_t i = 0; i < numLeds; i++) {
+      uint8_t color_add = sin8_C((i / map8(min(numLeds, uint16_t(255)), 1, 10)) + cycle);
       setPixeltoHue(i, foreColor + color_add);
     }
   }
@@ -641,13 +638,13 @@ void Shows::confetti(void)
 {
   if (isShowStart()) {
     turnOnMorphing();  // Cycle starts a confetti pixel
-    uint8_t fast_change = map8(numLeds, delay_time * 5, delay_time);
+    uint8_t fast_change = map8(min(numLeds, uint16_t(255)), delay_time * 5, delay_time);
     pickRandomCycleDuration(fast_change, fast_change * 5);
   }
   dimAllPixels(1);  // Number = trailing frames
 
   if (isCycleStart()) {
-    for (uint8_t i = 0; i < 1 + (numLeds / 20); i++) {
+    for (uint16_t i = 0; i < 1 + (numLeds / 20); i++) {
       setPixeltoForeColor(random8(numLeds));
     }
   }
@@ -672,7 +669,7 @@ void Shows::bpm_fastled(void)
   // colored stripes pulsing at a defined Beats-Per-Minute (BPM))
   uint8_t BeatsPerMinute = 1 + ((255 - show_speed) / 10);
   uint8_t beat = beatsin8( BeatsPerMinute, 64, 255);
-  for(uint8_t i = 0; i < numLeds; i++) {
+  for(uint16_t i = 0; i < numLeds; i++) {
     setPixeltoColor(i, led->gradient_wheel(foreColor + beat + (i / 10), beat - backColor + (i*2) ) );
   }
 }
@@ -688,271 +685,11 @@ void Shows::juggle_fastled(void)
   uint8_t dot_hue = 0;
 
   for(uint8_t i = 0; i < 8; i++) {
-    uint8_t pixel = beatsin16(i, 0, numLeds);
+    uint16_t pixel = beatsin16(i, 0, numLeds);
     CHSV curr_color = led->getCurrFrameColor(i);
     CHSV new_color = CHSV(curr_color.h | dot_hue, curr_color.s | 200, curr_color.v | 255);
     setPixeltoColor(pixel, new_color);
     dot_hue += 32;
-  }
-}
-
-void Shows::kitt(void)
-{
-  // Show translated from KITT on electromage.com/patterns
-
-  // Globals: these are memory indices, not values
-  #define kitt_leader  0
-  #define kitt_direction  1
-  #define kitt_pixels 0
-
-  if (isShowStart()) {
-    setGlobal(0, kitt_leader);
-    setGlobal(1, kitt_direction);
-    turnOffMorphing();  // Relying on delta animation
-  }
-
-  uint16_t time_delta = delta();
-
-  float new_leader = getGlobal(kitt_leader) + (getGlobal(kitt_direction) * time_delta * numLeds / 800);
-
-  if (new_leader >= numLeds) {
-    multiplyGlobal(-1, kitt_direction);  // turn around
-    setGlobal(numLeds - 1, kitt_leader);
-  } else if (new_leader < 0) {
-    multiplyGlobal(-1, kitt_direction);  // turn around
-    setGlobal(0, kitt_leader);
-  } else {
-    setGlobal(new_leader, kitt_leader);
-  }
-
-  setFloatMemoryArray(1, uint8_t(getGlobal(kitt_leader)), kitt_pixels);
-
-  for (uint8_t i = 0; i < numLeds; i++) {
-    float value = getFloatMemoryArray(i, kitt_pixels) - (time_delta * 0.0007);
-    if (value < 0) {
-      value = 0;
-    }
-    setFloatMemoryArray(value, i, kitt_pixels);
-    value = value * value * value * 255;
-    if (value > 255) {
-      value = 255;
-    }
-    setPixeltoColor(i, CHSV(getForeColor(), 255, uint8_t(value)));
-  }
-}
-
-void Shows::fireflies(void)
-{
-  // Show translated from FireFlies on electromage.com/patterns
-
-  // Globals: these are memory indices, not values
-  #define sparks_numSparks 0
-  #define sparks_pixels 0
-  #define sparks_sparks 1
-  #define sparks_sparkX 1
-
-  if (isShowStart()) {
-    setGlobal(1 + (numLeds / 10), sparks_numSparks);
-    turnOffMorphing();  // Relying on delta animation
-  }
-
-  float time_delta = delta() * 0.1;
-
-  for (uint8_t i = 0; i < numLeds; i++) {
-    setFloatMemoryArray(getFloatMemoryArray(i, sparks_pixels) * 0.9, i, sparks_pixels);
-  }
-
-  for (uint8_t i = 0; i < uint8_t(getGlobal(sparks_numSparks)); i++) {
-    float value = getFloatMemoryArray(i, sparks_sparks);
-
-    if (value >= -0.01 && value <= 0.01) {
-      setFloatMemoryArray((0.4 / 2) - (random8(40) / 100), i, sparks_sparks);
-      setFloatMemoryArray(random(numLeds), i, sparks_sparkX);
-    }
-
-    setFloatMemoryArray(getFloatMemoryArray(i, sparks_sparks) * 0.99, i, sparks_sparks);
-    setFloatMemoryArray(getFloatMemoryArray(i, sparks_sparks) * time_delta, i, sparks_sparkX);
-
-    float sparkX = getFloatMemoryArray(i, sparks_sparkX);
-
-    if (sparkX > numLeds) {
-      sparkX = 0;
-    }
-
-    if (sparkX < 0) {
-      sparkX = numLeds - 1;
-    }
-    setFloatMemoryArray(sparkX, i, sparks_sparkX);
-    setFloatMemoryArray(getFloatMemoryArray(uint8_t(sparkX), sparks_pixels) + sparkX, uint8_t(sparkX), sparks_pixels);
-  }
-
-  for (uint8_t i = 0; i < numLeds; i++) {
-    float value = getFloatMemoryArray(i, sparks_pixels);
-    value = clamp(value * value * 10 * 255, 0, 255);
-    setPixeltoColor(i, CHSV(13, 255, uint8_t(value)));
-  }
-}
-
-void Shows::sparkfire(void)
-{
-  // Show translated from sparkfire on electromage.com/patterns
-
-  // Globals: these are memory indices, not values
-  #define sparkfire_numSparks 5
-
-  #define sparkfire_sparks 0
-  #define sparkfire_sparkX 1
-  #define sparkfire_pixels 2
-
-  if (isShowStart()) {
-    turnOffMorphing();  // Relying on delta animation
-
-    for (uint8_t i = 0; i < sparkfire_numSparks; i++) {
-      setFloatMemoryArray(random(40) / 100.0, i, sparkfire_sparks);  // random(0.4)
-      setFloatMemoryArray(random(numLeds), i, sparkfire_sparkX);
-    }
-  }
-
-  float time_delta = delta() * 0.5;  // speed = 0.05
-  float cooldown = 0.04 * time_delta;  // cooling1 = 0.04
-
-  for (uint8_t i = 0; i < numLeds; i++) {
-    if (cooldown > getFloatMemoryArray(i, sparkfire_pixels)) {
-      setFloatMemoryArray(0, i, sparkfire_pixels);
-    } else {
-      setFloatMemoryArray((getFloatMemoryArray(i, sparkfire_pixels) * 0.99) - cooldown, i, sparkfire_pixels);
-    }
-  }
-
-  for (uint8_t k = numLeds - 1; k >= 4; k--) {
-    setFloatMemoryArray((getFloatMemoryArray(k - 1, sparkfire_pixels) +
-                         getFloatMemoryArray(k - 2, sparkfire_pixels) +
-                        (getFloatMemoryArray(k - 3, sparkfire_pixels) * 2) +
-                        (getFloatMemoryArray(k - 4, sparkfire_pixels) * 3)
-                        ) / 7, k, sparkfire_pixels);
-  }
-
-  for (uint8_t i = 0; i < sparkfire_numSparks; i++) {
-    float value = getFloatMemoryArray(i, sparkfire_sparks);
-
-    if (value < 0) {
-      value = random8(255) / 255.0;  // 0–1
-      setFloatMemoryArray(0, i, sparkfire_sparkX);
-    }
-
-    float new_spark = value + (time_delta * 0.03);
-    setFloatMemoryArray(new_spark, i, sparkfire_sparks);  // accel * delta
-
-    float ox = getFloatMemoryArray(i, sparkfire_sparkX);
-    float sparkX = ox + (new_spark * new_spark * time_delta);
-
-    if (sparkX > numLeds) {
-      setFloatMemoryArray(0, i, sparkfire_sparkX);
-      setFloatMemoryArray(0, i, sparkfire_sparks);
-      continue;
-    } else {
-      setFloatMemoryArray(sparkX, i, sparkfire_sparkX);
-    }
-
-    for (uint8_t j = ox; j < sparkX; j++) {
-      value = getFloatMemoryArray(j, sparkfire_pixels);
-      new_spark = 1 - (getFloatMemoryArray(i, sparkfire_sparks) * 0.4);
-      new_spark = clamp(new_spark, 0, 1);
-      setFloatMemoryArray(new_spark * 0.5, j, sparkfire_pixels);
-    }
-  }
-
-  // render
-  for (uint8_t i = 0; i < numLeds; i++) {
-    float v = getFloatMemoryArray(i, sparks_pixels);
-    setPixeltoColor(i, CHSV(0.1 * clamp(v*v, 0,1) * 255,
-                            (1-(v-1)*2) * 255,
-                            v*2 * 255));
-  }
-}
-
-void Shows::edgeburst(void)
-{
-  // Show translated from Edgeburst on electromage.com/patterns
-  #define edgeburst_time_window  100  // test this
-
-  if (isShowStart()) {
-    turnOffMorphing();  // Relying on delta animation
-  }
-
-  float t1 = time_sawtooth(edgeburst_time_window);
-
-  // render
-  for (uint8_t i = 0; i < numLeds; i++) {
-    float f = i / numLeds;  // 0–1 fraction
-    float edge = clamp(f + (t1 * 4) - 2, 0, 1);
-    setPixeltoColor(i, CHSV(((edge * edge) - 0.2) * 255,
-                            255,
-                            edge * 255)
-                   );
-  }
-}
-
-void Shows::halloween_color_twinkle(void)
-{
-  // Show translated from Halloween color twinkle on electromage.com/patterns
-  #define twinkle_time_window  100  // test this
-  #define PI2 (3.14 * 2)
-
-  if (isShowStart()) {
-    turnOffMorphing();  // Relying on delta animation
-  }
-
-  float t1 = time_sawtooth(twinkle_time_window) * PI2;
-  float t2 = time_sawtooth(twinkle_time_window / 3.33) * PI2;
-
-  // render
-  for (uint8_t i = 0; i < numLeds; i++) {
-    float h = sin((i / 3.0) + (PI2 * sin((i / 2.0) + t1)));
-    float v = sin(((i / 3.0) / PI2) + sin((i / 2.0) + t2));
-    v = (1 + v) / 2.0;  // wave(sin(arg)) -1 to 1 -> 0 to 1
-    v = v * v * v * v;
-    v = (v > 0.1) ? v : 0;
-
-    if (h > 0) {
-      h = clamp((h * 0.1) + 0.7, 0, 1);
-    } else {
-      h = clamp((h * 0.05) + 0.02, 0, 1);
-    }
-
-    setPixeltoColor(i, CHSV(h * 255, 255, v * 255));
-  }
-}
-
-void Shows::sunrise(void)
-{
-  // Show translated from Halloween color twinkle on electromage.com/patterns
-  #define t0  0  // global constant
-  #define risetime  100  // play with this
-  #define sunrise_color  (255 * 0.02)
-
-  if (isShowStart()) {
-    turnOffMorphing();  // Relying on delta animation
-    setGlobal(time_sawtooth(risetime), 0);  // record initial condition
-  }
-
-  float t = (1 + time_sawtooth(risetime) - getGlobal(t0));
-  while (t > 1) {
-    t = t - 1;  // t = t % 1;
-  }
-  float t1 = max(float(0), clamp(2 * t, 0, 1));
-  float t2 = max(float(0), clamp((2 * t) - 1, 0, 1));
-
-  // render
-  for (uint8_t i = 0; i < numLeds; i++) {
-    float fract = i / numLeds;  // 0–1
-    if (t2 == 0) {
-      float v = clamp(-1 + fract + (2 * t1), 0, 1);
-      setPixeltoColor(i, CHSV(sunrise_color, 255, v * 255));
-    } else {
-      float v = clamp(-1 + fract + (2 * t2), 0, 1);
-      setPixeltoColor(i, CHSV(sunrise_color, (1 - v) * 255, v * 255));
-    }
   }
 }
 
@@ -979,8 +716,8 @@ void Shows::sawTooth(void)
     pickRandomCycleDuration(30, 300);
   }
   if (isCycleStart()) {
-    for (uint8_t i = 0; i < numLeds; i++) {
-      uint8_t intense = sin8_C(((cycle + i) % numLeds) * 255 / numLeds);
+    for (uint16_t i = 0; i < numLeds; i++) {
+      uint8_t intense = sin8_C(((cycle + i) % numLeds) * 255 / min(numLeds, uint16_t(255)));
       setPixeltoColor(numLeds - i - 1, led->gradient_wheel(foreColor+i, intense));
     }
   }
@@ -992,6 +729,7 @@ void Shows::lightWave(void)
     turnOnMorphing();
     pickRandomCycleDuration(30, 90);
   }
+
   dimAllPixels(1 + ((101 - cycle_duration) / 10));  // Number = trailing frames
 
   if (isCycleStart()) {
@@ -1008,12 +746,12 @@ void Shows::lightRunUp(void)
 
   dimAllPixels(1 + ((101 - cycle_duration) / 10));  // Number = trailing frames
 
-  uint8_t pos = cycle % (numLeds * 2);  // Where we are in the show
+  uint16_t pos = cycle % (numLeds * 2);  // Where we are in the show
   if (pos >= numLeds) {
     pos = (numLeds * 2) - pos;
   }
 
-  for (uint8_t i = 0; i < pos; i++) {
+  for (uint16_t i = 0; i < pos; i++) {
     // interpolation kinda handled by main smoothing function
     setPixeltoHue(i, foreColor + i);  // Turning on lights one at a time
   }
@@ -1096,7 +834,7 @@ void Shows::bounce(void)
 
   if (isShowStart()) {
     turnOnMorphing();
-    pickRandomCycleDuration(30, 280);
+    pickRandomCycleDuration(30, 100);
     setNumBalls(random(2, MAX_BALLS));
   }
 
@@ -1135,7 +873,7 @@ void Shows::bounceGlowing(void)
 
   if (isShowStart()) {
     turnOnMorphing();
-    pickRandomCycleDuration(30, 200);
+    pickRandomCycleDuration(30, 100);
     setNumBalls(random(2, MAX_BALLS));
   }
 
@@ -1143,7 +881,7 @@ void Shows::bounceGlowing(void)
 
   if (!isCycleStart()) { return; }  // Only move at the start of a cycle
 
-  led->fill(CHSV(170, 255, 40));  // changed color.v from 2 to 40
+  led->fill(CHSV(170, 255, 2));  // changed color.v from 2 to 40
 
   uint8_t hue = getForeColor();
 
@@ -1218,7 +956,7 @@ void Shows::setNumBalls(uint8_t i)
   setMemory(i, 0);  // number of object is index 0
 }
 
-void Shows::setMemory(uint8_t value, uint16_t position)
+void Shows::setMemory(uint8_t value, uint8_t position)
 {
   if (position < numLeds * MEMORY) {
     memory[position] = value;
@@ -1232,62 +970,4 @@ uint8_t Shows::getMemory(uint8_t position)
   } else {
     return XX;
   }
-}
-
-void Shows::setMemoryArray(uint8_t value, uint8_t position, uint8_t array)
-{
-  if (position < numLeds && array < MEMORY) {
-    memory[(array * numLeds) + position] = value;
-  }
-}
-
-uint8_t Shows::getMemoryArray(uint8_t position, uint8_t array)
-{
-  if (position < numLeds && array < MEMORY) {
-    return memory[(array * numLeds) + position];
-  } else {
-    return XX;
-  }
-}
-
-void Shows::setFloatMemoryArray(float value, uint8_t position, uint8_t array)
-{
-  if (position < numLeds && array < FLOAT_MEMORY) {
-    float_memory[(array * numLeds) + position] = value;
-  }
-}
-
-float Shows::getFloatMemoryArray(uint8_t position, uint8_t array)
-{
-  if (position < numLeds && array < FLOAT_MEMORY) {
-    return float_memory[(array * numLeds) + position];
-  } else {
-    return 0;
-  }
-}
-
-void Shows::setGlobal(float value, uint8_t position)
-{
-  if (position < MAX_GLOBALS) {
-    global_memory[position] = value;
-  }
-}
-
-float Shows::getGlobal(uint8_t position)
-{
-  if (position < MAX_GLOBALS) {
-    return global_memory[position];
-  } else {
-    return 0;
-  }
-}
-
-void Shows::addGlobal(float addition, uint8_t position)
-{
-  setGlobal(getGlobal(position) + addition, position);
-}
-
-void Shows::multiplyGlobal(float multiplier, uint8_t position)
-{
-  setGlobal(getGlobal(position) * multiplier, position);
 }
