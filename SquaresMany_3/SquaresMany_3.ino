@@ -4,26 +4,39 @@
 #include "painlessMesh.h"
 #include <Arduino_JSON.h>
 //
-//  Small Square: 6 x 6 = 36 lights in a square grid
+//  Many Small Squares, each 6 x 6 = 36 lights
 //
-//  4/27/24
+//  9/25/24
 //
-//  Modern Software
+//  Modern Software, built on the Dragon software
+
+#define SIZE  6  // edge of a small square
+#define SQUARE_LEDS  (SIZE * SIZE)
+
+#define NUM_SQUARES  16
+#define NUM_LEDS  (NUM_SQUARES * SQUARE_LEDS)
+
+uint8_t square_location[] = {  // x,y grid location for each square
+  0, 0,  1, 1,  1, 2,  1, 3,
+  2, 0,  2, 1,  2, 2,  3, 3,
+  3, 4,  3, 2,  3, 0,  4, 4,
+  4, 1,  4, 3,  5, 5,  5, 2
+};
+
+#define MAX_SQUARE_GRID_SIDE  16  // none of the above coordinates can be bigger than this!
+uint8_t square_grid[MAX_SQUARE_GRID_SIDE * MAX_SQUARE_GRID_SIDE];
+
+uint8_t MIN_SQUARE_X, MIN_SQUARE_Y, MAX_SQUARE_X, MAX_SQUARE_Y, GRID_WIDTH, GRID_HEIGHT;
 
 uint8_t bright = 255;  // (0-255)
 uint8_t curr_bright = bright;
 
 uint8_t show_speed = 128;  // (0 = fast, 255 = slow)
 
-#define DELAY_TIME 15 // in milliseconds
+#define DELAY_TIME 25 // in milliseconds
 
 #define DATA_PIN 0
 #define CLOCK_PIN 2
-
-#define NUM_LEDS 36
-#define HALF_LEDS (NUM_LEDS / 2)  // Half that number
-
-#define SIZE  6
 
 // Smoothing constants - lower is slower smoothing
 #define SMOOTHING_SHOWS_HUE    4   // Fastest full rainbow = DELAY_TIME * (255 / this value) = 150 ms
@@ -44,7 +57,7 @@ Shows shows[] = { Shows(&led[CHANNEL_A], CHANNEL_A),
 CHSV led_buffer[NUM_LEDS];  // For smoothing
 CRGB leds[NUM_LEDS];  // The Leds themselves
 
-uint8_t colors = 1;  // color scheme: 0 = all, 1 = red, 2 = blue, 3 = yellow
+uint8_t colors = 0;  // color scheme: 0 = all, 1 = red, 2 = blue, 3 = yellow
 
 uint8_t hue_center = 0;
 uint8_t hue_width = 255;
@@ -58,14 +71,23 @@ uint8_t saturation = 255;
 #define START_SHOW_CHANNEL_A  0  // Startings shows for Channels A + B
 #define START_SHOW_CHANNEL_B  1
 uint8_t current_show[] = { START_SHOW_CHANNEL_A, START_SHOW_CHANNEL_B };
-uint8_t show_variables[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };  // 2 each: pattern, rotate, symmetry, mask, pattern_type, wipe_type
+
+#define NUM_SHOW_VARIABLES  (2 * NUM_SQUARES * 6)
+#define VAR_PATTERN       0
+#define VAR_ROTATE        1
+#define VAR_SYMMETRY      2
+#define VAR_MASK          3
+#define VAR_PATTERN_TYPE  4
+#define VAR_WIPE_TYPE     5
+uint8_t show_variables[NUM_SHOW_VARIABLES];  // 6: pattern, rotate, symmetry, mask, pattern_type, wipe_type
+
 uint8_t freq_storage[] = { 60, 80 };  // 1-byte storage for shows
 #define NUM_SHOWS 23
 
 // Clocks and time
 
-uint8_t show_duration = 80;  // Typically 30 seconds. Size problems at 1800+ seconds.
-uint8_t fade_amount = 196;  // 0 = no fading, to 255 = always be fading
+uint8_t show_duration = 255;  // Typically 30 seconds. Size problems at 1800+ seconds.
+uint8_t fade_amount = 0;  // 0 = no fading, to 255 = always be fading
 
 // Game of Life
 
@@ -118,7 +140,7 @@ Task taskUpdateLeds(TASK_MILLISECOND * DELAY_TIME, TASK_FOREVER, &updateLeds);
 #define FADE_COMMAND 6
 #define SATURATION_COMMAND 7
 
-//// End Mesh parameters
+//// End Mesh parameterss
 
 // Lookup tables
 
@@ -210,6 +232,9 @@ void setup() {
 
   FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN, RGB>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness( bright );
+
+  set_min_max_square_grid();
+  fill_square_grid();
   
   // Set up the various mappings (1D lists in PROGMEM)
   for (uint8_t i = 0; i < DUAL; i++) {
@@ -228,6 +253,9 @@ void setup() {
   
   shows[CHANNEL_B].setStartShowTime(millis() - shows[CHANNEL_A].getElapsedShowTime() - (show_duration * 1000 / 2));
 
+  // blank out the show variables
+  clear_all_show_variables();
+  
   for (uint8_t i = 0; i < NUM_LEDS; i++) {
     led_buffer[i] = CHSV(0, 0, 0);
   }
@@ -267,7 +295,8 @@ void updateLeds() {
     switch (current_show[i]) {
   
       case 0:
-        patterns(i);   // ????
+        check_wiring(i);
+//        patterns(i);   // ????
         break;
       case 1:
         shows[i].morphChain();   // good
@@ -462,6 +491,19 @@ uint8_t get_dist(uint8_t x1, uint8_t y1, float x2, float y2) {
   uint16_t dx = sq(uint8_t(x2 * mult) - (x1 * mult));
   uint16_t dy = sq(uint8_t(y2 * mult) - (y1 * mult));
   return sqrt( dx + dy );
+}
+
+//
+// check wiring
+//
+void check_wiring(uint8_t c) {
+  if (shows[c].isShowStart()) {
+    shows[c].turnOnMorphing();
+  }
+//  uint16_t cycle = shows[c].getCycle() % NUM_LEDS;
+  shows[c].fillForeBlack();
+  shows[c].setPixeltoForeColor(shows[c].getCycle() % NUM_LEDS);
+//  shows[c].setPixeltoForeColor(get_pixel_from_coord(cycle % SIZE, cycle / SIZE));
 }
 
 //
@@ -989,24 +1031,37 @@ void nodeTimeAdjustedCallback(int32_t offset) {
 void morph_channels() {
   boolean update_leds = false;
   uint8_t fract = shows[CHANNEL_A].get_intensity();  // 0–255 between channel A and B
+  uint16_t pixel;
   
-  for (int i = 0; i < NUM_LEDS; i++) {
-    CHSV color_b = mask(led[CHANNEL_B].getCurrFrameColor(rotate_pixel(i, CHANNEL_B)), i, CHANNEL_B);
-    CHSV color_a = mask(led[CHANNEL_A].getCurrFrameColor(rotate_pixel(i, CHANNEL_A)), i, CHANNEL_A);
-    CHSV color = led[CHANNEL_A].getInterpHSV(color_b, color_a, fract);  // interpolate a + b channels
-    if (hue_width < 255 || saturation < 255) {
-     color = led[CHANNEL_A].narrow_palette(color, hue_center, hue_width, saturation);
-    }
+  for (int s = 0; s < NUM_SQUARES; s++) {
+    for (int i = 0; i < SQUARE_LEDS; i++) {
+      pixel = (s * SQUARE_LEDS) + i;
+      
+      CHSV color_b = led[CHANNEL_B].getCurrFrameColor((s * SQUARE_LEDS) + (rotate_pixel(i, CHANNEL_B, s)));
+      color_b = mask(color_b, i, CHANNEL_B, s);
 
-    // smoothing backstop. smooth constants should be large.
-    color = led[CHANNEL_A].smooth_color(led_buffer[i], color, SMOOTHING_SHOWS_HUE, SMOOTHING_SHOWS_VALUE);
+      CHSV color_a = led[CHANNEL_A].getCurrFrameColor((s * SQUARE_LEDS) + (rotate_pixel(i, CHANNEL_A, s)));
+      color_a = mask(color_a, i, CHANNEL_A, s);
+      
+//      CHSV color_b = mask(led[CHANNEL_B].getCurrFrameColor(rotate_pixel(i, CHANNEL_B, s)), i, CHANNEL_B, s);
+//      CHSV color_a = mask(led[CHANNEL_A].getCurrFrameColor(rotate_pixel(i, CHANNEL_A, s)), i, CHANNEL_A, s);
 
-    if (led_buffer[i].h == color.h && led_buffer[i].s == color.s && led_buffer[i].v == color.v) {
-      continue;
-    } else {
-      leds[convert_pixel_to_led(i)] = color;   // put HSV color on to LEDs
-      led_buffer[i] = color;  // push new color into led_buffer (both HSV)
-      update_leds = true;
+      CHSV color = led[CHANNEL_A].getInterpHSV(color_b, color_a, fract);  // interpolate a + b channels
+      if (hue_width < 255 || saturation < 255) {
+       color = led[CHANNEL_A].narrow_palette(color, hue_center, hue_width, saturation);
+      }
+  
+      // smoothing backstop. smooth constants should be large.
+//      color = led[CHANNEL_A].smooth_color(led_buffer[i], color, SMOOTHING_SHOWS_HUE, SMOOTHING_SHOWS_VALUE);
+      color = led[CHANNEL_A].smooth_color(led_buffer[pixel], color, SMOOTHING_SHOWS_HUE, SMOOTHING_SHOWS_VALUE);
+  
+      if (led_buffer[pixel].h == color.h && led_buffer[pixel].s == color.s && led_buffer[pixel].v == color.v) {
+        continue;
+      } else {
+        leds[(s * SQUARE_LEDS) + convert_pixel_to_led(i)] = color;   // put HSV color on to LEDs
+        led_buffer[pixel] = color;  // push new color into led_buffer (both HSV)
+        update_leds = true;
+      }
     }
   }
 
@@ -1018,12 +1073,12 @@ void morph_channels() {
 //
 // mask
 //
-CHSV mask(CHSV color, uint8_t i, uint8_t channel) {
-  if (show_variables[channel + 6] == 0 || current_show[i] == 0) {  // ToDo: Check this
+CHSV mask(CHSV color, uint8_t i, uint8_t channel, uint8_t s) {
+  uint8_t mask_value = get_show_variable(s, channel, VAR_MASK);
+  if (mask_value == 0 || current_show[i] == 0) {
     return color;  // no masking
   }
-  uint8_t mask_value = show_variables[channel + 6] - 1;
-  boolean value = get_bit_from_pattern_number(i, show_variables[channel]);
+  boolean value = get_bit_from_pattern_number(i, get_show_variable(s, channel, VAR_PATTERN));
   if (mask_value % 2 == 0) {
     value = !value;
   }
@@ -1043,8 +1098,8 @@ uint8_t convert_pixel_to_led(uint8_t i) {
     0,  3,  4,  7,  8, 11,
    22, 21, 18, 17, 14, 12,
    23, 20, 19, 16, 15, 13,
-   25, 26, 29, 30, 33, 34,
-   24, 27, 28, 31, 32, 35
+   24, 26, 29, 30, 33, 34,  // 25, 26, 29, 30, 33, 34,
+   25, 27, 28, 31, 32, 35  // 24, 27, 28, 31, 32, 35
   };
   return LED_LOOKUP[i % NUM_LEDS];
 }
@@ -1099,11 +1154,14 @@ void mirror_pixels(uint8_t channel) {
 //
 // rotate_pixel - rotate square grid 90-degrees for each "r"
 //
-uint8_t rotate_pixel(uint8_t i, uint8_t channel) {
+uint8_t rotate_pixel(uint8_t i, uint8_t channel, uint8_t s) {
+  uint8_t rotation = get_show_variable(s, channel, VAR_ROTATE);
+  if (rotation == 0) {
+    return i;
+  }
   uint8_t new_x, new_y;
   uint8_t x = i % SIZE;
   uint8_t y = i / SIZE;
-  uint8_t rotation = show_variables[2 + channel];
 
   for (uint8_t r = rotation; r > 0; r--) {
     new_x = SIZE - y - 1;
@@ -1117,6 +1175,72 @@ uint8_t rotate_pixel(uint8_t i, uint8_t channel) {
 
 
 //// End DUAL SHOW LOGIC
+
+
+//// Square Grids
+
+//
+// get_show_variable
+//
+uint8_t get_show_variable(uint8_t square, uint8_t c, uint8_t variable) {
+  return show_variables[((square * 6 * 2) + (c * 6) + variable)];
+}
+
+void set_show_variable(uint8_t square, uint8_t c, uint8_t variable, uint8_t value) {
+  show_variables[((square * 6 * 2) + (c * 6) + variable)] = value;
+}
+
+void clear_all_show_variables() {
+  for (uint8_t i = 0; i < NUM_SHOW_VARIABLES; i++) {
+    show_variables[i] = 0;
+  }
+}
+
+//
+// set_min_max_square_grid
+//
+void set_min_max_square_grid() {
+  uint8_t min_x = 255;
+  uint8_t min_y = 255;
+  uint8_t max_x = 0;
+  uint8_t max_y = 0;
+  
+  for (uint8_t i = 0; i < NUM_SQUARES; i++) {
+    if (square_location[(i*2)] < min_x) {
+      min_x = square_location[(i*2)];
+    }
+    if (square_location[(i*2)+1] < min_y) {
+      min_y = square_location[(i*2)+1];
+    }
+    if (square_location[(i*2)] > max_x) {
+      max_x = square_location[(i*2)];
+    }
+    if (square_location[(i*2)+1] > max_y) {
+      max_y = square_location[(i*2)+1];
+    }
+  }
+  MIN_SQUARE_X = min_x;
+  MIN_SQUARE_Y = min_y;
+  MAX_SQUARE_X = max_x;
+  MAX_SQUARE_Y = max_y;
+  GRID_WIDTH = MAX_SQUARE_X - MIN_SQUARE_X;
+  GRID_HEIGHT = MAX_SQUARE_Y - MIN_SQUARE_Y;
+}
+
+//
+// fill_square_grid
+//
+void fill_square_grid() {
+  // empty the square grid
+  for (uint8_t i = 0; i < MAX_SQUARE_GRID_SIDE * MAX_SQUARE_GRID_SIDE; i++) {
+    square_grid[i] = XX;
+  }
+  
+  for (uint8_t i = 0; i < NUM_SQUARES; i++) {
+    square_grid[(GRID_WIDTH * (square_location[(i*2)+1] - MIN_SQUARE_Y)) + (square_location[(i*2)] - MIN_SQUARE_X)] = i;
+  }
+}
+
 
 //
 // set_color_scheme

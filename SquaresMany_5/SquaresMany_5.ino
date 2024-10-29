@@ -4,26 +4,40 @@
 #include "painlessMesh.h"
 #include <Arduino_JSON.h>
 //
-//  Small Square: 6 x 6 = 36 lights in a square grid
+//  Many Small Squares, each 6 x 6 = 36 lights
 //
-//  4/27/24
+//  9/27/24
 //
-//  Modern Software
+//  Modern Software, built on the Dragon software
+
+#define SIZE  6  // edge of a small square
+#define SQUARE_LEDS  (SIZE * SIZE)
+
+#define NUM_SQUARES  4
+#define NUM_LEDS  (NUM_SQUARES * SQUARE_LEDS)
+
+uint8_t square_location[] = {  // x,y grid location for each square
+  0, 0,  1, 1,  1, 2,  1, 3,
+  2, 0,  2, 1,  2, 2,  3, 3,
+  3, 4,  3, 2,  3, 0,  4, 4,
+  4, 1,  4, 3,  5, 5,  5, 2
+};
+
+
+#define MAX_SQUARE_X  8  // none of the above coordinates can be bigger than this!
+#define MAX_SQUARE_Y  7  // none of the above coordinates can be bigger than this!
+
+uint8_t square_grid[MAX_SQUARE_X * MAX_SQUARE_Y]; // where each square sits in the grid
 
 uint8_t bright = 255;  // (0-255)
 uint8_t curr_bright = bright;
 
 uint8_t show_speed = 128;  // (0 = fast, 255 = slow)
 
-#define DELAY_TIME 15 // in milliseconds
+#define DELAY_TIME 25 // in milliseconds
 
 #define DATA_PIN 0
 #define CLOCK_PIN 2
-
-#define NUM_LEDS 36
-#define HALF_LEDS (NUM_LEDS / 2)  // Half that number
-
-#define SIZE  6
 
 // Smoothing constants - lower is slower smoothing
 #define SMOOTHING_SHOWS_HUE    4   // Fastest full rainbow = DELAY_TIME * (255 / this value) = 150 ms
@@ -44,7 +58,7 @@ Shows shows[] = { Shows(&led[CHANNEL_A], CHANNEL_A),
 CHSV led_buffer[NUM_LEDS];  // For smoothing
 CRGB leds[NUM_LEDS];  // The Leds themselves
 
-uint8_t colors = 1;  // color scheme: 0 = all, 1 = red, 2 = blue, 3 = yellow
+uint8_t colors = 0;  // color scheme: 0 = all, 1 = red, 2 = blue, 3 = yellow
 
 uint8_t hue_center = 0;
 uint8_t hue_width = 255;
@@ -55,19 +69,37 @@ uint8_t saturation = 255;
 
 // Shows
 
+#define GRIDED_SHOW_START   23  // Show this number and above use the big grid
+
+#define NUM_SHOWS 30
+
 #define START_SHOW_CHANNEL_A  0  // Startings shows for Channels A + B
 #define START_SHOW_CHANNEL_B  1
 uint8_t current_show[] = { START_SHOW_CHANNEL_A, START_SHOW_CHANNEL_B };
-uint8_t show_variables[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };  // 2 each: pattern, rotate, symmetry, mask, pattern_type, wipe_type
+uint8_t show_type[] = { 0, 0 };  // whether all same, different, or on a big grid
+
+#define SHOW_TYPE_ALL_SAME   0
+#define SHOW_TYPE_DIFFERENT  1
+#define SHOW_TYPE_BIG_GRID   2
+
+#define NUM_SHOW_VARIABLES  (2 * NUM_SQUARES * 6)
+#define VAR_PATTERN       0
+#define VAR_ROTATE        1
+#define VAR_SYMMETRY      2
+#define VAR_MASK          3
+#define VAR_PATTERN_TYPE  4
+#define VAR_WIPE_TYPE     5
+uint8_t show_variables[NUM_SHOW_VARIABLES];  // 6: pattern, rotate, symmetry, mask, pattern_type, wipe_type
+
 uint8_t freq_storage[] = { 60, 80 };  // 1-byte storage for shows
-#define NUM_SHOWS 23
+
 
 // Clocks and time
 
-uint8_t show_duration = 80;  // Typically 30 seconds. Size problems at 1800+ seconds.
-uint8_t fade_amount = 196;  // 0 = no fading, to 255 = always be fading
+uint8_t show_duration = 40;  // Typically 30 seconds. Size problems at 1800+ seconds.
+uint8_t fade_amount = 48;  // 0 = no fading, to 255 = always be fading
 
-// Game of Life
+// Game of Life: ToDo: this is f'd
 
 #define LIFE_DIMENSION  10
 #define TOTAL_LIFE  (LIFE_DIMENSION * LIFE_DIMENSION)
@@ -102,8 +134,9 @@ String getReadings();  // Prototype for reading state of LEDs
 #define MESSAGE_SPACING 4   // wait this many DELAY_TIME (7 x 15 ms = every 0.105 s)
 
 Scheduler userScheduler; // to control your personal task
-void updateLeds();
+void updateLeds(), changePalette();
 Task taskUpdateLeds(TASK_MILLISECOND * DELAY_TIME, TASK_FOREVER, &updateLeds);
+Task taskChangePalette(TASK_MINUTE * 20, TASK_FOREVER, &changePalette);
 
 #define IR_MESSAGE  0
 #define MESH_MESSAGE  1
@@ -118,17 +151,7 @@ Task taskUpdateLeds(TASK_MILLISECOND * DELAY_TIME, TASK_FOREVER, &updateLeds);
 #define FADE_COMMAND 6
 #define SATURATION_COMMAND 7
 
-//// End Mesh parameters
-
-// Lookup tables
-
-//  0  1  2  3  4  5
-//  6  7  8  9 10 11
-// 12 13 14 15 16 17
-// 18 19 20 21 22 23
-// 24 25 26 27 28 29
-// 30 31 32 33 34 35
-
+//// End Mesh parameterss
 
 uint8_t neighbors[] PROGMEM = {
   XX, 1, 6, XX,  // 0
@@ -210,6 +233,9 @@ void setup() {
 
   FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN, RGB>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness( bright );
+
+  fill_square_grid();
+
   
   // Set up the various mappings (1D lists in PROGMEM)
   for (uint8_t i = 0; i < DUAL; i++) {
@@ -228,7 +254,9 @@ void setup() {
   
   shows[CHANNEL_B].setStartShowTime(millis() - shows[CHANNEL_A].getElapsedShowTime() - (show_duration * 1000 / 2));
 
-  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+  clear_all_show_variables();  // blank out the show variables
+  
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
     led_buffer[i] = CHSV(0, 0, 0);
   }
 
@@ -245,6 +273,10 @@ void setup() {
 
   userScheduler.addTask(taskUpdateLeds);
   taskUpdateLeds.enable();
+
+  userScheduler.addTask(taskChangePalette);
+  taskChangePalette.enable();
+
 }
 
 //
@@ -261,32 +293,107 @@ void loop() {
 // update leds - Moved to a task-scheduled event
 //
 void updateLeds() {
-
+  
   for (uint8_t i = 0; i < DUAL; i++) {
 
+    if (current_show[i] > 0 && current_show[i] < GRIDED_SHOW_START) {
+      shows[i].resetNumLeds(SQUARE_LEDS);  // show is on just the first square 
+    }
+    
     switch (current_show[i]) {
-  
+      
       case 0:
-        patterns(i);   // ????
+        patterns(i);
         break;
       case 1:
-        shows[i].morphChain();   // good
+        shows[i].lightWave();  // why so fast?
         break;
       case 2:
-        shows[i].bounce();  // no
+        shows[i].morphChain();  // throbbing
         break;
       case 3:
-        shows[i].bounceGlowing();  // no
+        shows[i].bounce();
         break;
       case 4:
-        shows[i].plinko(5);  // no
+        shows[i].bounceGlowing();
         break;
       case 5:
-        shows[i].lightRunUp();  // good
+        shows[i].plinko(5);
         break;
       case 6:
+        shows[i].lightRunUp();  // good
+        break;
+      case 7:
         shows[i].sinelon_fastled();  // good
         break;
+      case 8:
+        windmill(i);  // good
+        break;
+      case 9:
+        windmill_smoothed(i);  // good
+        break;
+      case 10:
+        cone_push(i);  // good
+        break;
+      case 11:
+        pendulum_wave(i, true);  // good
+        break;
+      case 12:
+        pendulum_wave(i, false);  // good
+        break;
+      case 13:
+        game_of_life(i); // ???
+        break;
+      case 14:
+        shows[i].randomFlip();  // good
+        break;
+      case 15:
+        shows[i].stripes();  // good
+        break;
+      case 16:
+        shows[i].juggle_fastled();  // good
+        break;
+      case 17:
+        shows[i].randomTwoColorBlack();  // good
+        break;
+      case 18:
+        shows[i].randomOneColorBlack();  // good
+        break;
+      case 19:
+        shows[i].sawTooth();  // good
+        break;
+      case 20:
+        center_ring(i);  // good
+        break;
+      case 21:
+        corner_ring(i);  // ???
+        break;
+      case 22:
+        well(i);  // good
+        break;
+      //////////////////// List shows
+      case 23:
+        shows[i].lightWave();  // good
+        break;
+      case 24:
+        shows[i].morphChain();
+        break;
+      case 25:
+        shows[i].lightRunUp();  // good
+        break;
+      case 26:
+        shows[i].sinelon_fastled();  // good
+        break;
+      case 27:
+        shows[i].juggle_fastled();  // good
+        break;
+      case 28:
+        shows[i].sawTooth();  // good
+        break;
+      default:
+        shows[i].lightWave();  // good
+
+      /*  ToDo: program these shows with big grids
       case 7:
         windmill(i);  // good
         break;
@@ -302,27 +409,6 @@ void updateLeds() {
       case 11:
         pendulum_wave(i, false);  // good
         break;
-      case 12:
-        game_of_life(i); // ???
-        break;
-      case 13:
-        shows[i].randomFlip();  // good
-        break;
-      case 14:
-        shows[i].stripes();  // good
-        break;
-      case 15:
-        shows[i].juggle_fastled();  // good
-        break;
-      case 16:
-        shows[i].randomTwoColorBlack();  // good
-        break;
-      case 17:
-        shows[i].randomOneColorBlack();  // good
-        break;
-      case 18:
-        shows[i].sawTooth();  // good
-        break;
       case 19:
         center_ring(i);  // good
         break;
@@ -332,14 +418,17 @@ void updateLeds() {
       case 21:
         well(i);  // good
         break;
-      default:
-        shows[i].lightWave();  // good
-        break;
+      */
     }
-    shows[i].morphFrame();  // 1. calculate interp_frame 2. adjust palette
-    mirror_pixels(i);  // This flickers if done incorrectly
-  }
 
+    if (current_show[i] > 0 && current_show[i] < GRIDED_SHOW_START) {
+      copy_first_square(i); 
+    }
+    
+    shows[i].morphFrame();  // calculate interp_frame 2. adjust palette
+//    mirror_pixels(i);  // This flickers if done incorrectly. ToDo: Fix!
+  }
+  
   morph_channels();
   advance_clocks();
 }
@@ -401,23 +490,38 @@ void next_show(uint8_t i) {
 // pick_next_show - dependent on channel i
 //
 void pick_next_show(uint8_t i) {
-  uint8_t mask = 0;
-  uint8_t symmetry = 0;
   
   current_show[i] = (current_show[i] != 0 && !is_other_channel_show_zero(i)) ? 0 : random8(1, NUM_SHOWS) ;
 //  current_show[i] = (current_show[i] + 1) % NUM_SHOWS;  // For debugging
-  show_variables[i] = random8(NUM_PATTERNS);
-  mask = pick_random_mask(i);
-  
-  if (mask == 0) {
-    symmetry = pick_random_symmetry();
+
+  if (current_show[i] < GRIDED_SHOW_START) {
+//    show_type[i] = SHOW_TYPE_ALL_SAME;  // good for debugging
+    set_show_variables_one_square(i, 0);
+    show_type[i] = (random(4) == 1) ? SHOW_TYPE_ALL_SAME : SHOW_TYPE_DIFFERENT;
+    if (show_type[i] == SHOW_TYPE_DIFFERENT) {
+      for (uint8_t s = 1; s < NUM_SQUARES; s++) {
+        set_show_variables_one_square(i, s);
+      }
+    }
+  } else {
+    show_type[i] = SHOW_TYPE_BIG_GRID;
+    clear_all_show_variables();
   }
-  show_variables[i + 6] = mask;
-  show_variables[i + 4] = symmetry;
-  show_variables[i + 2] = random(4);
   
   shows[i].pickRandomColorSpeeds();
   log_status(i);  // For debugging
+}
+
+void set_show_variables_one_square(uint8_t c, uint8_t s) {
+  uint8_t mask = pick_random_mask(c);
+  uint8_t symmetry = (mask == 0) ? pick_random_symmetry() : 0;
+  
+  set_show_variable(s, c, VAR_PATTERN, random8(NUM_PATTERNS));
+  set_show_variable(s, c, VAR_MASK, mask);
+  set_show_variable(s, c, VAR_ROTATE, random(4));
+  set_show_variable(s, c, VAR_SYMMETRY, symmetry);
+  set_show_variable(s, c, VAR_PATTERN_TYPE, random(12));
+  set_show_variable(s, c, VAR_WIPE_TYPE, random(6));
 }
 
 boolean is_other_channel_show_zero(uint8_t c) {
@@ -447,6 +551,21 @@ uint8_t pick_random_symmetry() {
 }
 
 //
+//  copy_first_square - copy first square onto all the other squares
+//
+void copy_first_square(uint8_t c) {
+  shows[c].resetNumLeds(NUM_LEDS);  // reopen led size to access all pixels
+  
+  for (uint8_t i = 0; i < SQUARE_LEDS; i++) {
+    CHSV color = led[c].getNextFrameColor(i);
+    for (uint8_t s = 1; s < NUM_SQUARES; s++) {
+      uint16_t pixel = i + (s * SQUARE_LEDS);
+      shows[c].setPixeltoColor(pixel, color);
+    }
+  }
+}
+
+//
 // get_pixel_from_coord - get LED i from x,y grid coordinate
 //
 uint8_t get_pixel_from_coord(uint8_t x, uint8_t y) {
@@ -465,48 +584,65 @@ uint8_t get_dist(uint8_t x1, uint8_t y1, float x2, float y2) {
 }
 
 //
+// check wiring
+//
+void check_wiring(uint8_t c) {
+  if (shows[c].isShowStart()) {
+    shows[c].turnOnMorphing();
+  }
+  shows[c].fillForeBlack();
+  shows[c].setPixeltoForeColor(shows[c].getCycle() % SQUARE_LEDS);
+}
+
+//
 // patterns shows
 //
 void patterns(uint8_t c) {
   // Reset a lot of variables at the start of the show
   if (shows[c].isShowStart()) {
     shows[c].turnOffMorphing();  // Because we are using a beatsin8
-    show_variables[c] = random(NUM_PATTERNS);  // Pick a pattern
-    show_variables[c + 8] = random(12);   // Pick a fill algorithm
-    show_variables[c + 10] = random(6);  // Pick a different wipes
   }
-  uint8_t pattern = show_variables[c];
-  uint8_t change_value = show_variables[c + 8] % 2;
-  uint8_t pattern_type = show_variables[c + 8] / 2;
-  
-  for (uint8_t x = 0; x < SIZE; x++) {
-    for (uint8_t y = 0; y < SIZE; y++) {
-      boolean value = get_bit_from_pattern_number((y * SIZE) + x, pattern);
-      if (change_value == 1) {
-        value = !value;
-      }
-      uint8_t i = get_pixel_from_coord(x,y);
 
-      if (value) {
-        if (pattern_type % 2 == 1) {
-          shows[c].setPixeltoForeColor(i);
-        } else {
-          shows[c].setPixeltoForeBlack(i);
+  for (uint8_t s = 0; s < NUM_SQUARES; s++) {
+    
+    uint8_t pattern = get_show_variable(s, c, VAR_PATTERN);
+    uint8_t change_value = get_show_variable(s, c, VAR_PATTERN_TYPE)  % 2;
+    uint8_t pattern_type = get_show_variable(s, c, VAR_PATTERN_TYPE) / 2;
+    uint8_t wipe_type = get_show_variable(s, c, VAR_WIPE_TYPE);
+    
+    for (uint8_t x = 0; x < SIZE; x++) {
+      for (uint8_t y = 0; y < SIZE; y++) {
+        boolean value = get_bit_from_pattern_number((y * SIZE) + x, pattern);
+        if (change_value == 1) {
+          value = !value;
         }
-        
-      } else {
-        if (pattern_type < 2) {
-          shows[c].setPixeltoBackColor(i);
-        } else {
-          uint8_t intense = get_wipe_intensity(x, y, show_variables[c + 10], c, (pattern_type < 4));
-          uint8_t back_hue = shows[c].getBackColor();
-          if (pattern_type < 4) {
-            shows[c].setPixeltoHue(i, shows[c].IncColor(back_hue, intense));
+        uint8_t i = get_pixel_from_coord(x,y) + (s * SQUARE_LEDS);
+  
+        if (value) {
+          if (pattern_type % 2 == 1) {
+            shows[c].setPixeltoForeColor(i);
           } else {
-            shows[c].setPixeltoColor(i, led[c].gradient_wheel(back_hue, map8(intense, 64, 255)));
+            shows[c].setPixeltoForeBlack(i);
+          }
+          
+        } else {
+          if (pattern_type < 2) {
+            shows[c].setPixeltoBackColor(i);
+          } else {
+            uint8_t intense = get_wipe_intensity(x, y, wipe_type, c, (pattern_type < 4));
+            uint8_t back_hue = shows[c].getBackColor();
+            if (pattern_type < 4) {
+              shows[c].setPixeltoHue(i, shows[c].IncColor(back_hue, intense));
+            } else {
+              shows[c].setPixeltoColor(i, led[c].gradient_wheel(back_hue, map8(intense, 64, 255)));
+            }
           }
         }
       }
+    }
+    if (show_type[c] == SHOW_TYPE_ALL_SAME) {
+      copy_first_square(c);
+      return;
     }
   }
 }
@@ -517,7 +653,7 @@ void test_layout(uint8_t c) {
   }
 
   shows[c].fillForeBlack();
-  uint8_t pixel= shows[c].getCycle()  % NUM_LEDS;
+  uint8_t pixel = shows[c].getCycle()  % NUM_LEDS;
   
   shows[c].setPixeltoForeColor(pixel);
   Serial.print(pixel);
@@ -989,24 +1125,35 @@ void nodeTimeAdjustedCallback(int32_t offset) {
 void morph_channels() {
   boolean update_leds = false;
   uint8_t fract = shows[CHANNEL_A].get_intensity();  // 0–255 between channel A and B
+  uint16_t pixel;
+
+  for (uint8_t s = 0; s < NUM_SQUARES; s++) {
+    for (uint8_t i = 0; i < SQUARE_LEDS; i++) {
+      pixel = (s * SQUARE_LEDS) + i;
+
+      CHSV color = led[CHANNEL_A].getInterpHSV(get_color_from_pixel(CHANNEL_B, s, i),
+                                               get_color_from_pixel(CHANNEL_A, s, i), 
+                                               fract);  // interpolate a + b channels
+      if (hue_width < 255 || saturation < 255) {
+       color = led[CHANNEL_A].narrow_palette(color, hue_center, hue_width, saturation);
+      }
   
-  for (int i = 0; i < NUM_LEDS; i++) {
-    CHSV color_b = mask(led[CHANNEL_B].getCurrFrameColor(rotate_pixel(i, CHANNEL_B)), i, CHANNEL_B);
-    CHSV color_a = mask(led[CHANNEL_A].getCurrFrameColor(rotate_pixel(i, CHANNEL_A)), i, CHANNEL_A);
-    CHSV color = led[CHANNEL_A].getInterpHSV(color_b, color_a, fract);  // interpolate a + b channels
-    if (hue_width < 255 || saturation < 255) {
-     color = led[CHANNEL_A].narrow_palette(color, hue_center, hue_width, saturation);
-    }
-
-    // smoothing backstop. smooth constants should be large.
-    color = led[CHANNEL_A].smooth_color(led_buffer[i], color, SMOOTHING_SHOWS_HUE, SMOOTHING_SHOWS_VALUE);
-
-    if (led_buffer[i].h == color.h && led_buffer[i].s == color.s && led_buffer[i].v == color.v) {
-      continue;
-    } else {
-      leds[convert_pixel_to_led(i)] = color;   // put HSV color on to LEDs
-      led_buffer[i] = color;  // push new color into led_buffer (both HSV)
-      update_leds = true;
+      // smoothing backstop. smooth constants should be large.
+      color = led[CHANNEL_A].smooth_color(led_buffer[pixel], color, SMOOTHING_SHOWS_HUE, SMOOTHING_SHOWS_VALUE);
+  
+      if (led_buffer[pixel].h == color.h && led_buffer[pixel].s == color.s && led_buffer[pixel].v == color.v) {
+        continue;
+      } else {
+        /*
+        if (!led[CHANNEL_A].is_black(color) && (s == 0)) {
+          Serial.printf("Square %d, i %d, pixel %d", s, i, (s * SQUARE_LEDS) + convert_pixel_to_led(i));
+          Serial.println("");
+        }
+        */
+        leds[(s * SQUARE_LEDS) + convert_pixel_to_led(i)] = color;   // put HSV color on to LEDs
+        led_buffer[pixel] = color;  // push new color into led_buffer (both HSV)
+        update_leds = true;
+      }
     }
   }
 
@@ -1016,14 +1163,29 @@ void morph_channels() {
 }
 
 //
+// get_color_from_pixel
+//
+CHSV get_color_from_pixel(uint8_t c, uint8_t s, uint8_t i) {
+
+  if (show_type[c] == SHOW_TYPE_BIG_GRID) {
+    return led[c].getCurrFrameColor((s * SQUARE_LEDS) + i);
+  } else {
+    if (show_type[c] == SHOW_TYPE_ALL_SAME) {
+      s = 0;
+    }
+    return mask(led[c].getCurrFrameColor((s * SQUARE_LEDS) + (rotate_pixel(i, CHANNEL_B, s))), i, c, s);
+  }
+}
+
+//
 // mask
 //
-CHSV mask(CHSV color, uint8_t i, uint8_t channel) {
-  if (show_variables[channel + 6] == 0 || current_show[i] == 0) {  // ToDo: Check this
+CHSV mask(CHSV color, uint8_t i, uint8_t channel, uint8_t s) {
+  uint8_t mask_value = get_show_variable(s, channel, VAR_MASK);
+  if (mask_value == 0 || current_show[i] == 0) {
     return color;  // no masking
   }
-  uint8_t mask_value = show_variables[channel + 6] - 1;
-  boolean value = get_bit_from_pattern_number(i, show_variables[channel]);
+  boolean value = get_bit_from_pattern_number(i, get_show_variable(s, channel, VAR_PATTERN));
   if (mask_value % 2 == 0) {
     value = !value;
   }
@@ -1043,55 +1205,69 @@ uint8_t convert_pixel_to_led(uint8_t i) {
     0,  3,  4,  7,  8, 11,
    22, 21, 18, 17, 14, 12,
    23, 20, 19, 16, 15, 13,
-   25, 26, 29, 30, 33, 34,
-   24, 27, 28, 31, 32, 35
+   24, 26, 29, 30, 33, 34,  // 25, 26, 29, 30, 33, 34,
+   25, 27, 28, 31, 32, 35  // 24, 27, 28, 31, 32, 35
   };
-  return LED_LOOKUP[i % NUM_LEDS];
+  return LED_LOOKUP[i % SQUARE_LEDS];
 }
 
 //
 // mirror_pixels
 //
-void mirror_pixels(uint8_t channel) {  
-  uint8_t symmetry = show_variables[4 + channel];
-  
-  if (symmetry == 1 || symmetry == 3) {  // Horizontal mirroring
-    for (uint8_t y = 0 ; y < SIZE; y++) {
-      for (uint8_t x = 0 ; x < SIZE; x++) {
-        if (y >= SIZE / 2) {
-          led[channel].setCurrentFrame(get_pixel_from_coord(x, SIZE - y - 1), led[channel].getCurrFrameColor(get_pixel_from_coord(x,y)));
-        }
-      }
-    }
-  }
-  
-  if (symmetry == 2 || symmetry == 3) {  // Vertical mirroring
-    for (uint8_t y = 0 ; y < SIZE; y++) {
-      for (uint8_t x = 0 ; x < SIZE; x++) {
-        if (x >= SIZE / 2) {
-          led[channel].setCurrentFrame(get_pixel_from_coord(SIZE - x - 1, y), led[channel].getCurrFrameColor(get_pixel_from_coord(x,y)));
-        }
-      }
-    }
-  }
+void mirror_pixels(uint8_t c) {
 
-  if (symmetry == 4 || symmetry == 6) {  // Diagonal 1 mirroring
-    for (uint8_t y = 0 ; y < SIZE; y++) {
-      for (uint8_t x = 0 ; x < SIZE; x++) {
-        if (x > y) {
-          led[channel].setCurrentFrame(get_pixel_from_coord(y,x), led[channel].getCurrFrameColor(get_pixel_from_coord(x,y)));
+  for (uint8_t s = 0; s < NUM_SQUARES; s++) {
+  
+    uint8_t symmetry = get_show_variable(s, c, VAR_SYMMETRY);
+
+    if (symmetry == 0) {
+      continue;
+    }
+
+    uint16_t offset = s * SQUARE_LEDS;
+    
+    if (symmetry == 1 || symmetry == 3) {  // Horizontal mirroring
+      for (uint8_t y = 0 ; y < SIZE; y++) {
+        for (uint8_t x = 0 ; x < SIZE; x++) {
+          if (y >= SIZE / 2) {
+            led[c].setCurrentFrame(get_pixel_from_coord(x, SIZE - y - 1) + offset, led[c].getCurrFrameColor(get_pixel_from_coord(x,y) + offset));
+          }
         }
       }
     }
-  }
-  
-  if (symmetry == 5 || symmetry == 6) {  // Diagonal 2 mirroring
-    for (uint8_t y = 0 ; y < SIZE; y++) {
-      for (uint8_t x = 0 ; x < SIZE; x++) {
-        if (x + y < SIZE - 1) {
-          led[channel].setCurrentFrame(get_pixel_from_coord(SIZE - y - 1, SIZE - x - 1), led[channel].getCurrFrameColor(get_pixel_from_coord(x,y)));
+    
+    if (symmetry == 2 || symmetry == 3) {  // Vertical mirroring
+      for (uint8_t y = 0 ; y < SIZE; y++) {
+        for (uint8_t x = 0 ; x < SIZE; x++) {
+          if (x >= SIZE / 2) {
+            led[c].setCurrentFrame(get_pixel_from_coord(SIZE - x - 1, y) + offset, led[c].getCurrFrameColor(get_pixel_from_coord(x,y) + offset));
+          }
         }
       }
+    }
+  
+    if (symmetry == 4 || symmetry == 6) {  // Diagonal 1 mirroring
+      for (uint8_t y = 0 ; y < SIZE; y++) {
+        for (uint8_t x = 0 ; x < SIZE; x++) {
+          if (x > y) {
+            led[c].setCurrentFrame(get_pixel_from_coord(y,x) + offset, led[c].getCurrFrameColor(get_pixel_from_coord(x,y) + offset));
+          }
+        }
+      }
+    }
+    
+    if (symmetry == 5 || symmetry == 6) {  // Diagonal 2 mirroring
+      for (uint8_t y = 0 ; y < SIZE; y++) {
+        for (uint8_t x = 0 ; x < SIZE; x++) {
+          if (x + y < SIZE - 1) {
+            led[c].setCurrentFrame(get_pixel_from_coord(SIZE - y - 1, SIZE - x - 1) + offset, led[c].getCurrFrameColor(get_pixel_from_coord(x,y) + offset));
+          }
+        }
+      }
+    }
+    
+    if (show_type[c] == SHOW_TYPE_ALL_SAME) {
+      return;
     }
   }
 }
@@ -1099,11 +1275,14 @@ void mirror_pixels(uint8_t channel) {
 //
 // rotate_pixel - rotate square grid 90-degrees for each "r"
 //
-uint8_t rotate_pixel(uint8_t i, uint8_t channel) {
+uint8_t rotate_pixel(uint8_t i, uint8_t channel, uint8_t s) {
+  uint8_t rotation = get_show_variable(s, channel, VAR_ROTATE);
+  if (rotation == 0) {
+    return i;
+  }
   uint8_t new_x, new_y;
   uint8_t x = i % SIZE;
   uint8_t y = i / SIZE;
-  uint8_t rotation = show_variables[2 + channel];
 
   for (uint8_t r = rotation; r > 0; r--) {
     new_x = SIZE - y - 1;
@@ -1117,6 +1296,41 @@ uint8_t rotate_pixel(uint8_t i, uint8_t channel) {
 
 
 //// End DUAL SHOW LOGIC
+
+
+//// Square Grids
+
+//
+// get_show_variable
+//
+uint8_t get_show_variable(uint8_t square, uint8_t c, uint8_t variable) {
+  return show_variables[((square * 6 * 2) + (c * 6) + variable)];
+}
+
+void set_show_variable(uint8_t square, uint8_t c, uint8_t variable, uint8_t value) {
+  show_variables[((square * 6 * 2) + (c * 6) + variable)] = value;
+}
+
+void clear_all_show_variables() {
+  for (uint8_t i = 0; i < NUM_SHOW_VARIABLES; i++) {
+    show_variables[i] = 0;
+  }
+}
+
+//
+// fill_square_grid
+//
+void fill_square_grid() {
+  // empty the square grid
+  for (uint8_t i = 0; i < MAX_SQUARE_X * MAX_SQUARE_Y; i++) {
+    square_grid[i] = XX;
+  }
+  
+  for (uint8_t i = 0; i < NUM_SQUARES; i++) {
+    square_grid[(MAX_SQUARE_X * square_location[(i*2)+1]) + square_location[(i*2)]] = i;
+  }
+}
+
 
 //
 // set_color_scheme
@@ -1142,6 +1356,11 @@ void set_color_scheme() {
       hue_width = 255;
       break;
   }
+}
+
+void changePalette() {
+  colors = (colors + 1) % 4;
+  set_color_scheme();
 }
 
 //

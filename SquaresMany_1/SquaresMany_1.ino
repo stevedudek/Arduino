@@ -4,26 +4,36 @@
 #include "painlessMesh.h"
 #include <Arduino_JSON.h>
 //
-//  Small Square: 6 x 6 = 36 lights in a square grid
+//  Many Small Squares, each 6 x 6 = 36 lights
 //
-//  4/27/24
+//  9/25/24
 //
-//  Modern Software
+//  Modern Software, built on the Dragon software
+
+#define SIZE  6  // edge of a small square
+#define SQUARE_LEDS  36 // (SIZE * SIZE)
+
+#define NUM_SQUARES  16
+#define NUM_LEDS  (NUM_SQUARES * SQUARE_LEDS)
+
+uint8_t square_location[] = {  // x,y grid location for each square
+  0, 0,  1, 1,  1, 2,  1, 3,
+  2, 0,  2, 1,  2, 2,  3, 3,
+  3, 4,  3, 2,  3, 0,  4, 4,
+  4, 1,  4, 3,  5, 5,  5, 2
+};
+
+uint8_t MIN_SQUARE_X, MIN_SQUARE_Y, MAX_SQUARE_X, MAX_SQUARE_Y, GRID_WIDTH, GRID_HEIGHT;
 
 uint8_t bright = 255;  // (0-255)
 uint8_t curr_bright = bright;
 
 uint8_t show_speed = 128;  // (0 = fast, 255 = slow)
 
-#define DELAY_TIME 15 // in milliseconds
+#define DELAY_TIME 25 // in milliseconds
 
 #define DATA_PIN 0
 #define CLOCK_PIN 2
-
-#define NUM_LEDS 36
-#define HALF_LEDS (NUM_LEDS / 2)  // Half that number
-
-#define SIZE  6
 
 // Smoothing constants - lower is slower smoothing
 #define SMOOTHING_SHOWS_HUE    4   // Fastest full rainbow = DELAY_TIME * (255 / this value) = 150 ms
@@ -44,7 +54,7 @@ Shows shows[] = { Shows(&led[CHANNEL_A], CHANNEL_A),
 CHSV led_buffer[NUM_LEDS];  // For smoothing
 CRGB leds[NUM_LEDS];  // The Leds themselves
 
-uint8_t colors = 1;  // color scheme: 0 = all, 1 = red, 2 = blue, 3 = yellow
+uint8_t colors = 0;  // color scheme: 0 = all, 1 = red, 2 = blue, 3 = yellow
 
 uint8_t hue_center = 0;
 uint8_t hue_width = 255;
@@ -64,8 +74,8 @@ uint8_t freq_storage[] = { 60, 80 };  // 1-byte storage for shows
 
 // Clocks and time
 
-uint8_t show_duration = 80;  // Typically 30 seconds. Size problems at 1800+ seconds.
-uint8_t fade_amount = 196;  // 0 = no fading, to 255 = always be fading
+uint8_t show_duration = 255;  // Typically 30 seconds. Size problems at 1800+ seconds.
+uint8_t fade_amount = 0;  // 0 = no fading, to 255 = always be fading
 
 // Game of Life
 
@@ -118,7 +128,7 @@ Task taskUpdateLeds(TASK_MILLISECOND * DELAY_TIME, TASK_FOREVER, &updateLeds);
 #define FADE_COMMAND 6
 #define SATURATION_COMMAND 7
 
-//// End Mesh parameters
+//// End Mesh parameterss
 
 // Lookup tables
 
@@ -210,6 +220,8 @@ void setup() {
 
   FastLED.addLeds<WS2801, DATA_PIN, CLOCK_PIN, RGB>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness( bright );
+
+//  set_min_max_square_grid();
   
   // Set up the various mappings (1D lists in PROGMEM)
   for (uint8_t i = 0; i < DUAL; i++) {
@@ -267,7 +279,8 @@ void updateLeds() {
     switch (current_show[i]) {
   
       case 0:
-        patterns(i);   // ????
+        check_wiring(i);
+//        patterns(i);   // ????
         break;
       case 1:
         shows[i].morphChain();   // good
@@ -462,6 +475,19 @@ uint8_t get_dist(uint8_t x1, uint8_t y1, float x2, float y2) {
   uint16_t dx = sq(uint8_t(x2 * mult) - (x1 * mult));
   uint16_t dy = sq(uint8_t(y2 * mult) - (y1 * mult));
   return sqrt( dx + dy );
+}
+
+//
+// check wiring
+//
+void check_wiring(uint8_t c) {
+  if (shows[c].isShowStart()) {
+    shows[c].turnOnMorphing();
+  }
+//  uint16_t cycle = shows[c].getCycle() % NUM_LEDS;
+  shows[c].fillForeBlack();
+  shows[c].setPixeltoForeColor(shows[c].getCycle() % NUM_LEDS);
+//  shows[c].setPixeltoForeColor(get_pixel_from_coord(cycle % SIZE, cycle / SIZE));
 }
 
 //
@@ -1043,8 +1069,8 @@ uint8_t convert_pixel_to_led(uint8_t i) {
     0,  3,  4,  7,  8, 11,
    22, 21, 18, 17, 14, 12,
    23, 20, 19, 16, 15, 13,
-   25, 26, 29, 30, 33, 34,
-   24, 27, 28, 31, 32, 35
+   24, 26, 29, 30, 33, 34,  // 25, 26, 29, 30, 33, 34,
+   25, 27, 28, 31, 32, 35  // 24, 27, 28, 31, 32, 35
   };
   return LED_LOOKUP[i % NUM_LEDS];
 }
@@ -1117,6 +1143,41 @@ uint8_t rotate_pixel(uint8_t i, uint8_t channel) {
 
 
 //// End DUAL SHOW LOGIC
+
+
+//// Square Grids
+
+//
+// set_min_max_square_grid
+//
+void set_min_max_square_grid() {
+  uint8_t min_x = 255;
+  uint8_t min_y = 255;
+  uint8_t max_x = 0;
+  uint8_t max_y = 0;
+  
+  for (uint8_t i = 0; i < NUM_SQUARES; i++) {
+    if (square_location[(i*2)] < min_x) {
+      min_x = square_location[(i*2)];
+    }
+    if (square_location[(i*2)+1] < min_y) {
+      min_y = square_location[(i*2)+1];
+    }
+    if (square_location[(i*2)] > max_x) {
+      max_x = square_location[(i*2)];
+    }
+    if (square_location[(i*2)+1] > max_y) {
+      max_y = square_location[(i*2)+1];
+    }
+  }
+  MIN_SQUARE_X = min_x;
+  MIN_SQUARE_Y = min_y;
+  MAX_SQUARE_X = max_x;
+  MAX_SQUARE_Y = max_y;
+  GRID_WIDTH = MAX_SQUARE_X - MIN_SQUARE_X;
+  GRID_HEIGHT = MAX_SQUARE_Y - MIN_SQUARE_Y;
+}
+
 
 //
 // set_color_scheme

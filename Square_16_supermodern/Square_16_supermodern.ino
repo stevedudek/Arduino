@@ -6,7 +6,7 @@
 //
 //  Small Square: 6 x 6 = 36 lights in a square grid
 //
-//  4/27/24
+//  9/18/24
 //
 //  Modern Software
 
@@ -44,7 +44,7 @@ Shows shows[] = { Shows(&led[CHANNEL_A], CHANNEL_A),
 CHSV led_buffer[NUM_LEDS];  // For smoothing
 CRGB leds[NUM_LEDS];  // The Leds themselves
 
-uint8_t colors = 1;  // color scheme: 0 = all, 1 = red, 2 = blue, 3 = yellow
+uint8_t colors = 0;  // color scheme: 0 = all, 1 = red, 2 = blue, 3 = yellow
 
 uint8_t hue_center = 0;
 uint8_t hue_width = 255;
@@ -64,8 +64,8 @@ uint8_t freq_storage[] = { 60, 80 };  // 1-byte storage for shows
 
 // Clocks and time
 
-uint8_t show_duration = 80;  // Typically 30 seconds. Size problems at 1800+ seconds.
-uint8_t fade_amount = 196;  // 0 = no fading, to 255 = always be fading
+uint8_t show_duration = 255;  // Typically 30 seconds. Size problems at 1800+ seconds.
+uint8_t fade_amount = 0;  // 0 = no fading, to 255 = always be fading
 
 // Game of Life
 
@@ -118,7 +118,7 @@ Task taskUpdateLeds(TASK_MILLISECOND * DELAY_TIME, TASK_FOREVER, &updateLeds);
 #define FADE_COMMAND 6
 #define SATURATION_COMMAND 7
 
-//// End Mesh parameters
+//// End Mesh parameterss
 
 // Lookup tables
 
@@ -267,7 +267,8 @@ void updateLeds() {
     switch (current_show[i]) {
   
       case 0:
-        patterns(i);   // ????
+        check_wiring(i);
+//        patterns(i);   // ????
         break;
       case 1:
         shows[i].morphChain();   // good
@@ -462,6 +463,19 @@ uint8_t get_dist(uint8_t x1, uint8_t y1, float x2, float y2) {
   uint16_t dx = sq(uint8_t(x2 * mult) - (x1 * mult));
   uint16_t dy = sq(uint8_t(y2 * mult) - (y1 * mult));
   return sqrt( dx + dy );
+}
+
+//
+// check wiring
+//
+void check_wiring(uint8_t c) {
+  if (shows[c].isShowStart()) {
+    shows[c].turnOnMorphing();
+  }
+//  uint16_t cycle = shows[c].getCycle() % NUM_LEDS;
+  shows[c].fillForeBlack();
+  shows[c].setPixeltoForeColor(shows[c].getCycle() % NUM_LEDS);
+//  shows[c].setPixeltoForeColor(get_pixel_from_coord(cycle % SIZE, cycle / SIZE));
 }
 
 //
